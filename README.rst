@@ -2,17 +2,12 @@
 hypothes.is API
 ===============================
 
-.. image:: https://img.shields.io/travis/rdhyee/hypothesisapi.svg
-        :target: https://travis-ci.org/rdhyee/hypothesisapi
-
-.. image:: https://img.shields.io/pypi/v/hypothesisapi.svg
-        :target: https://pypi.python.org/pypi/hypothesisapi
-
-
-Python wrapper for the hypothes.is web API
+Python wrapper for the nascent hypothes.is web API
 
 * Free software: BSD license
-* Documentation: https://hypothesisapi.readthedocs.org.
+* [Future] Documentation: https://hypothesisapi.readthedocs.org.
+
+This package is very early in its development.  Not suitable for production use in any way!
 
 Features
 --------
