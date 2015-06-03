@@ -3,7 +3,7 @@ from __future__ import absolute_import
 
 __author__ = 'Raymond Yee'
 __email__ = 'raymond.yee@gmail.com'
-__version__ = '0.1.0'
+__version__ = '0.2.0'
 
 import requests
 import json
@@ -19,6 +19,9 @@ APP_URL = "https://hypothes.is/app"
 API_URL = "https://hypothes.is/api"
 
 # We can probably learn a lot from https://h.readthedocs.org/en/latest/api.html
+
+def remove_none(d):
+    return dict([(k,v) for (k, v) in d.items() if v is not None])
 
 class API(object):
     """
@@ -116,8 +119,22 @@ class API(object):
                          cookies=cookies, headers=headers))
         
  
-        self.token =  r.content
-    
+        self.token =  r.content        
+        
+    def get_annotation(self, _id):
+        """
+        https://hypothes.is/api/annotations/:id
+        """
+        url = self.api_url + "/annotations/" + _id
+        headers = {"X-Annotator-Auth-Token": self.token, "x-csrf-token":self.csrf_token}
+        r = requests.get(url, headers = headers)
+        
+        if r.status_code == 200:
+            return r.json()
+        else:
+            return None
+             
+                
     def search_id (self, _id):
         
         url = self.api_url + "/search?_id=" + _id
@@ -128,19 +145,27 @@ class API(object):
             return r.json()
         else:
             return None
+    
         
-    def search (self, user, offset=0, page_size=10):
+    def search  (self, user=None, sort=None, order="asc", offset=0, limit=10, uri=None, **kw):
         
         headers = {"X-Annotator-Auth-Token": self.token, "x-csrf-token":self.csrf_token}
-        page_size = page_size
-        user_acct = "acct:{user}@hypothes.is".format(user=user)
-        
-        limit=page_size
+        user_acct = "acct:{user}@hypothes.is".format(user=user) if user is not None else None
+
+        search_dict = ({'user':user_acct,
+         'sort':sort,
+         'order':order,
+         'offset':offset,
+         'uri':uri,
+         'limit':limit})
+    
+        search_dict.update(kw)
+        search_dict = remove_none(search_dict)
         
         more_results = True
     
         while more_results:
-            search_dict = {'user':user_acct, 'limit':limit, 'offset':offset}
+    
             url = self.api_url + "/search?{query}".format(query=urlencode(search_dict))
             
             r = requests.get(url, headers=headers)
@@ -149,7 +174,7 @@ class API(object):
             if len(rows):
                 for row in rows:
                     yield row
-                offset += page_size
+                search_dict['offset'] += limit
             else:
                 more_results = False
 

@@ -24,7 +24,7 @@ test_requirements = [
 
 setup(
     name='hypothesisapi',
-    version='0.1.0',
+    version='0.2.0',
     description="Python wrapper for the hypothes.is web API",
     long_description=readme + '\n\n' + history,
     author="Raymond Yee",
