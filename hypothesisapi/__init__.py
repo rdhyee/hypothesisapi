@@ -133,31 +133,7 @@ class API(object):
             return r.json()
         else:
             return None
-        
-    def create_annotation_w_text(self, text):
-       url = self.api_url +  '/annotations'
-       
-       headers = {"X-Annotator-Auth-Token": self.token, "x-csrf-token":self.csrf_token}
-       
-       payload = {
-           "uri": "...",
-           "user": "acct:rdhyee@hypothes.is",
-           "permissions": {
-               "read": ["group:__world__"],
-               "update": ["acct:rdhyee@hypothes.is"],
-               "delete": ["acct:rdhyee@hypothes.is"],
-               "admin": ["acct:rdhyee@hypothes.is"],
-           },
-           "document": { },
-           "target": [ ],
-           "tags": [ 'tag'],
-           "text": text
-       }
-       
-       data = json.dumps(payload)
-       
-       r = requests.post(url, headers=headers, data=data)       
-            
+             
                 
     def search_id (self, _id):
         
