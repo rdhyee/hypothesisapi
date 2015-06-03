@@ -35,6 +35,9 @@ htmlcov
 .project
 .pydevproject
 
+#Generated files
+*~
+
 # Complexity
 output/*.html
 output/*/index.html
