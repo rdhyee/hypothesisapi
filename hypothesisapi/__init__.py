@@ -28,18 +28,16 @@ class API(object):
     currently a wrapper for the nascent web API for 
     """
     
-    def __init__(self, username, password, api_url=API_URL, app_url=APP_URL):
+    def __init__(self, username, api_key, api_url=API_URL, app_url=APP_URL):
         """
         I think at this point, a hypothes.is username/password required for API to work
         """
         self.api_url = api_url
         self.app_url = app_url
         self.username = username
-        self.password = password
-        self.csrf_token = None
-        self.token = None
+        self.api_key = api_key
 
-    def create (self, payload):
+    def create(self, payload):
         
         user = self.username
         user_acct = "acct:{user}@hypothes.is".format(user=user)
@@ -83,12 +81,12 @@ class API(object):
                 }
             ]
             payload_out["target"] = target
-        data = json.dumps(payload_out)
         headers = {"content-type": "application/json;charset=UTF-8",
-                   "X-Annotator-Auth-Token": self.token, 
-                   "x-csrf-token": self.csrf_token
+                   "Accept": "application/json",
+                   "Authorization": "Bearer "+self.api_key
                    }
-        r = requests.post(self.api_url + "/annotations", headers = headers, data = data)
+        print(payload_out)
+        r = requests.post(self.api_url + "/annotations", headers=headers, json=payload_out)
         if r.status_code == 200:
             return r.json()
         else:
@@ -96,37 +94,13 @@ class API(object):
             print(r.text)
             return None
         
-    def login(self):
-        
-        # pick up some cookies to start the session
-        
-        r = requests.get(self.app_url)
-        cookies = r.cookies
 
-        # make call to https://hypothes.is/app?__formid__=login
-        
-        payload = {"username":self.username,"password":self.password}
-        self.csrf_token = cookies['XSRF-TOKEN']
-        data = json.dumps(payload)
-        headers = {'content-type':'application/json;charset=UTF-8', 'x-csrf-token': self.csrf_token}
-        
-        r = requests.post(url=self.app_url  + "?__formid__=login", data=data, cookies=cookies, headers=headers)
-        
-        # get token
-
-        url = self.api_url + "/token?" + urlencode({'assertion':self.csrf_token})
-        r = (requests.get(url=url,
-                         cookies=cookies, headers=headers))
-        
- 
-        self.token =  r.content        
-        
     def get_annotation(self, _id):
         """
         https://hypothes.is/api/annotations/:id
         """
         url = self.api_url + "/annotations/" + _id
-        headers = {"X-Annotator-Auth-Token": self.token, "x-csrf-token":self.csrf_token}
+        headers = {"Accept": "application/json"}
         r = requests.get(url, headers = headers)
         
         if r.status_code == 200:
@@ -134,22 +108,23 @@ class API(object):
         else:
             return None
              
-                
-    def search_id (self, _id):
+    '''
+    As per https://h.readthedocs.io/en/latest/api.html?#search I don't think this is a thing anymore.
+    '''
+    def search_id(self, _id):
         
         url = self.api_url + "/search?_id=" + _id
         
-        headers = {"X-Annotator-Auth-Token": self.token, "x-csrf-token":self.csrf_token}
+        headers = {"Accept": "application/json"}
         r = requests.get(url, headers = headers)
         if r.status_code == 200:
             return r.json()
         else:
             return None
-    
+
+    def search(self, user=None, sort=None, order="asc", offset=0, limit=10, uri=None, **kw):
         
-    def search  (self, user=None, sort=None, order="asc", offset=0, limit=10, uri=None, **kw):
-        
-        headers = {"X-Annotator-Auth-Token": self.token, "x-csrf-token":self.csrf_token}
+        headers = {"Accept": "application/json"}
         user_acct = "acct:{user}@hypothes.is".format(user=user) if user is not None else None
 
         search_dict = ({'user':user_acct,
@@ -177,8 +152,3 @@ class API(object):
                 search_dict['offset'] += limit
             else:
                 more_results = False
-
-    
-    
-        
-        
