@@ -10,8 +10,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-u', dest='user', action='store',
                     help='hypothes.is user')
 
-parser.add_argument('-p', dest='password', action='store',
-                    help='hypothes.is password')
+parser.add_argument('-k', dest='api_key', action='store',
+                    help='hypothes.is api_key')
 
 parser.add_argument('-l', dest='test_uri', action='store',
                     help='url to annotate')
