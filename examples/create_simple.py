@@ -19,7 +19,7 @@ parser.add_argument('-l', dest='test_uri', action='store',
 args = parser.parse_args()
 
 # Set up Hypothes.is config
-H = API(args.user, args.password)
+H = API(args.user, args.api_key)
 H.login()
 
 # Now test create on test_uri

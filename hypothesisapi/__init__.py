@@ -30,7 +30,7 @@ class API(object):
     
     def __init__(self, username, api_key, api_url=API_URL, app_url=APP_URL):
         """
-        I think at this point, a hypothes.is username/password required for API to work
+        I think at this point, a hypothes.is username/api_token required for API to work
         """
         self.api_url = api_url
         self.app_url = app_url
