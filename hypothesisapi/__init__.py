@@ -122,9 +122,13 @@ class API(object):
         else:
             return None
 
-    def search(self, user=None, sort=None, order="asc", offset=0, limit=10, uri=None, **kw):
+    def search(self, user=None, sort=None, order="asc", offset=0, limit=200, uri=None, **kw):
         
-        headers = {"Accept": "application/json"}
+        headers = {"content-type": "application/json;charset=UTF-8",
+                   "Accept": "application/json",
+                   "Authorization": "Bearer "+self.api_key
+                   }
+
         user_acct = "acct:{user}@hypothes.is".format(user=user) if user is not None else None
 
         search_dict = ({'user':user_acct,
@@ -144,7 +148,7 @@ class API(object):
             url = self.api_url + "/search?{query}".format(query=urlencode(search_dict))
             
             r = requests.get(url, headers=headers)
-            rows = r.json().get("rows")
+            rows = r.json().get("rows", [])
             
             if len(rows):
                 for row in rows:
