@@ -132,14 +132,21 @@ def main():
         print("=" * 60)
         parsed = urlparse(uri)
         domain = parsed.netloc
-        wildcard_pattern = f"http://{domain}/*"  # API normalizes to http
 
         print(f"Wildcard Search: {domain}/*")
         print("=" * 60)
 
-        # Use wildcard_uri for domain-wide search
-        # Note: wildcard_uri uses * for matching any characters
-        wildcard_annotations = list(api.search(wildcard_uri=wildcard_pattern, limit=20))
+        # Search both http and https schemes to ensure complete results
+        # The API doesn't normalize schemes, so we need to check both
+        wildcard_annotations = []
+        seen_ids = set()
+
+        for scheme in ["https", "http"]:
+            wildcard_pattern = f"{scheme}://{domain}/*"
+            for ann in api.search(wildcard_uri=wildcard_pattern, limit=20):
+                if ann.get("id") not in seen_ids:
+                    seen_ids.add(ann.get("id"))
+                    wildcard_annotations.append(ann)
 
         if wildcard_annotations:
             print(f"Found {len(wildcard_annotations)} annotations on {domain}")

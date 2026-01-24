@@ -126,26 +126,24 @@ def create_fixtures(api):
     else:
         print("\n4. Skipping reply (page note not created)")
 
-    # 5. Private annotation (Only Me group)
-    print("\n5. Creating private annotation...")
+    # 5. Public annotation demonstrating visibility concepts
+    # Note: Creating truly private ("Only Me") annotations requires the user's
+    # private group ID, which isn't easily available via the API. This fixture
+    # is PUBLIC but documents how privacy works in Hypothesis.
+    print("\n5. Creating visibility demo annotation (PUBLIC)...")
     try:
-        # Get user's private group ID
-        profile = api.get_profile()
-        user_id = profile.get("userid", "")
-
         result = api.create({
             "uri": WIKIPEDIA_URL,
-            "text": "This is a private annotation visible only to the owner. "
-                    "It demonstrates the 'Only Me' privacy setting.",
-            "tags": [FIXTURE_TAG, "private", "only-me"]
-        }, group="__world__")  # Note: To make truly private, would need user's private group
+            "text": "This is a PUBLIC annotation that documents Hypothesis visibility options. "
+                    "To create truly private annotations, you would need to specify a private "
+                    "group ID instead of '__world__'. The API doesn't easily expose your "
+                    "personal 'Only Me' group ID.",
+            "tags": [FIXTURE_TAG, "visibility-demo", "public"]
+        }, group="__world__")
 
-        # Note: Creating truly private annotations requires the user's private group ID
-        # which isn't easily available via the API. This creates a public annotation
-        # but tags it as "private" for demonstration purposes.
-        fixtures["private_demo"] = result["id"]
+        fixtures["visibility_demo"] = result["id"]
         print(f"   Created: {result['id']}")
-        print("   Note: True private annotations require the user's private group ID")
+        print("   Note: This is PUBLIC - see annotation text for privacy info")
     except HypothesisAPIError as e:
         print(f"   Error: {e}")
 
@@ -196,7 +194,7 @@ Target URL: {WIKIPEDIA_URL}
 | highlight | {fixtures.get('highlight', 'N/A')} | Highlight with comment |
 | multi_tag | {fixtures.get('multi_tag', 'N/A')} | Multi-tag annotation |
 | reply | {fixtures.get('reply', 'N/A')} | Reply to page note |
-| private_demo | {fixtures.get('private_demo', 'N/A')} | Private annotation demo |
+| visibility_demo | {fixtures.get('visibility_demo', 'N/A')} | Visibility concepts (PUBLIC) |
 """)
 
 

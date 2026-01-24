@@ -72,6 +72,8 @@ def extract_quote(annotation):
 
 def extract_username(user_string):
     """Extract username from acct:username@domain format."""
+    if not user_string:
+        return "(unknown)"
     if user_string.startswith("acct:"):
         return user_string.split(":")[1].split("@")[0]
     return user_string
@@ -170,6 +172,18 @@ def main():
 
         print(f"Found {len(annotations)} annotation(s)")
         print()
+
+        # Privacy warning
+        has_private_groups = any(
+            ann.get("group", "__world__") != "__world__"
+            for ann in annotations
+        )
+        if has_private_groups:
+            print("=" * 60)
+            print("WARNING: Export includes annotations from private groups.")
+            print("The exported files may contain sensitive data.")
+            print("=" * 60)
+            print()
 
         # Export to both formats
         print("Exporting...")

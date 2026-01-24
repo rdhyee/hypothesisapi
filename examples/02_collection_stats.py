@@ -69,13 +69,14 @@ def get_api():
 
 
 def parse_date(iso_string):
-    """Parse ISO date string to date object."""
+    """Parse ISO date string to timezone-aware datetime, return date in UTC."""
+    if not iso_string:
+        return None
     try:
-        # Handle various ISO formats
-        if "." in iso_string:
-            dt = datetime.fromisoformat(iso_string.replace("+00:00", "").split(".")[0])
-        else:
-            dt = datetime.fromisoformat(iso_string.replace("+00:00", "").replace("Z", ""))
+        # Normalize Z suffix to +00:00 for fromisoformat
+        normalized = iso_string.replace("Z", "+00:00")
+        dt = datetime.fromisoformat(normalized)
+        # Return UTC date to avoid timezone shift issues
         return dt.date()
     except (ValueError, AttributeError):
         return None

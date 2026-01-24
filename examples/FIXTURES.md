@@ -22,7 +22,7 @@ All fixture annotations are tagged with `#hypothesisapi-example` for easy discov
 | highlight | `_PENDING_` | Highlight with comment (anchored to "Web annotation" text) |
 | multi_tag | `_PENDING_` | Multi-tag annotation for search demos |
 | reply | `_PENDING_` | Reply annotation (threaded conversation) |
-| private_demo | `_PENDING_` | Private annotation demonstration |
+| visibility_demo | `_PENDING_` | Visibility concepts demo (PUBLIC - documents privacy options) |
 
 ## Setup Instructions
 
