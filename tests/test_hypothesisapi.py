@@ -93,6 +93,13 @@ class TestAPIResponseHandling(unittest.TestCase):
         result = self.api._handle_response(mock_response)
         self.assertEqual(result, {"id": "123"})
 
+    def test_handle_response_204_no_content(self):
+        """Test that 204 responses return empty dict."""
+        mock_response = Mock()
+        mock_response.status_code = 204
+        result = self.api._handle_response(mock_response)
+        self.assertEqual(result, {})
+
     def test_handle_response_auth_error(self):
         mock_response = Mock()
         mock_response.status_code = 401
@@ -157,6 +164,24 @@ class TestAPICreate(unittest.TestCase):
         call_args = mock_post.call_args
         payload = call_args.kwargs["json"]
         self.assertEqual(payload["group"], "mygroup")
+
+    @patch("hypothesisapi.requests.post")
+    def test_create_does_not_override_payload_group(self, mock_post):
+        """Test that create() doesn't override group if already in payload."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"id": "abc123", "group": "payload_group"}
+        mock_post.return_value = mock_response
+
+        # Pass group in payload AND as argument - payload should win
+        result = self.api.create(
+            {"uri": "https://example.com", "group": "payload_group"},
+            group="arg_group"
+        )
+        call_args = mock_post.call_args
+        payload = call_args.kwargs["json"]
+        # The group from payload should be preserved, not overwritten by arg
+        self.assertEqual(payload["group"], "payload_group")
 
 
 class TestAPISearch(unittest.TestCase):
@@ -238,6 +263,73 @@ class TestAPISearch(unittest.TestCase):
         results = list(self.api.search(user="nonexistent"))
         self.assertEqual(len(results), 0)
 
+    @patch("hypothesisapi.requests.get")
+    def test_search_error_handling(self, mock_get):
+        """Test that search raises errors for non-200 responses."""
+        mock_response = Mock()
+        mock_response.status_code = 401
+        mock_response.text = "Unauthorized"
+        mock_get.return_value = mock_response
+
+        with self.assertRaises(AuthenticationError):
+            # Need to consume the generator to trigger the request
+            list(self.api.search(user="testuser"))
+
+    @patch("hypothesisapi.requests.get")
+    def test_search_with_multiple_tags(self, mock_get):
+        """Test that multiple tags are serialized as repeated tag= parameters."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"rows": [], "total": 0}
+        mock_get.return_value = mock_response
+
+        list(self.api.search(tags=["tag1", "tag2"]))
+        # Check the URL contains repeated tag= parameters (not tags=)
+        call_url = mock_get.call_args_list[0][0][0]
+        self.assertIn("tag=tag1", call_url)
+        self.assertIn("tag=tag2", call_url)
+        self.assertNotIn("tags=", call_url)
+
+    @patch("hypothesisapi.requests.get")
+    def test_search_with_single_tag_and_tags(self, mock_get):
+        """Test combining tag and tags parameters."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"rows": [], "total": 0}
+        mock_get.return_value = mock_response
+
+        list(self.api.search(tag="single", tags=["multi1", "multi2"]))
+        call_url = mock_get.call_args_list[0][0][0]
+        # All tags should be included as repeated tag= parameters
+        self.assertIn("tag=single", call_url)
+        self.assertIn("tag=multi1", call_url)
+        self.assertIn("tag=multi2", call_url)
+
+    @patch("hypothesisapi.requests.get")
+    def test_search_with_authority(self, mock_get):
+        """Test search with custom authority."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"rows": [], "total": 0}
+        mock_get.return_value = mock_response
+
+        list(self.api.search(user="testuser", authority="custom.org"))
+        call_url = mock_get.call_args_list[0][0][0]
+        self.assertIn("acct%3Atestuser%40custom.org", call_url)
+
+    @patch("hypothesisapi.requests.get")
+    def test_search_with_full_acct_user(self, mock_get):
+        """Test search accepts full acct: format for user."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"rows": [], "total": 0}
+        mock_get.return_value = mock_response
+
+        list(self.api.search(user="acct:someone@other.org"))
+        call_url = mock_get.call_args_list[0][0][0]
+        # Should use the full acct string as-is
+        self.assertIn("acct%3Asomeone%40other.org", call_url)
+
 
 class TestAPIAnnotationOperations(unittest.TestCase):
     """Tests for annotation CRUD operations."""
@@ -254,6 +346,33 @@ class TestAPIAnnotationOperations(unittest.TestCase):
 
         result = self.api.get_annotation("abc123")
         self.assertEqual(result["id"], "abc123")
+
+    @patch("hypothesisapi.requests.get")
+    def test_get_annotation_authenticated_by_default(self, mock_get):
+        """Test that get_annotation sends auth headers by default."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"id": "abc123"}
+        mock_get.return_value = mock_response
+
+        self.api.get_annotation("abc123")
+        # Check that Authorization header was included
+        call_kwargs = mock_get.call_args.kwargs
+        self.assertIn("Authorization", call_kwargs["headers"])
+        self.assertEqual(call_kwargs["headers"]["Authorization"], "Bearer testkey")
+
+    @patch("hypothesisapi.requests.get")
+    def test_get_annotation_unauthenticated(self, mock_get):
+        """Test get_annotation with authenticated=False."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"id": "abc123"}
+        mock_get.return_value = mock_response
+
+        self.api.get_annotation("abc123", authenticated=False)
+        # Check that Authorization header was NOT included
+        call_kwargs = mock_get.call_args.kwargs
+        self.assertNotIn("Authorization", call_kwargs["headers"])
 
     @patch("hypothesisapi.requests.patch")
     def test_update_annotation(self, mock_patch):

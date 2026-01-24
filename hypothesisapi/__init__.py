@@ -31,6 +31,7 @@ __all__ = [
 
 APP_URL = "https://hypothes.is/app"
 API_URL = "https://hypothes.is/api"
+DEFAULT_TIMEOUT = 30  # seconds
 
 
 def _remove_none(d: Dict[str, Any]) -> Dict[str, Any]:
@@ -119,8 +120,10 @@ class API:
 
     def _handle_response(self, response: requests.Response) -> Dict[str, Any]:
         """Handle API response and raise appropriate exceptions."""
-        if response.status_code == 200 or response.status_code == 201:
+        if response.status_code in (200, 201):
             return response.json()
+        elif response.status_code == 204:
+            return {}
         elif response.status_code == 401:
             raise AuthenticationError(
                 "Authentication failed. Check your API key.",
@@ -155,7 +158,11 @@ class API:
         Returns:
             Dictionary containing API links and version information.
         """
-        response = requests.get(self.api_url, headers=self._get_headers(authenticated=False))
+        response = requests.get(
+            self.api_url,
+            headers=self._get_headers(authenticated=False),
+            timeout=DEFAULT_TIMEOUT,
+        )
         return self._handle_response(response)
 
     # ========== Annotation Endpoints ==========
@@ -190,10 +197,13 @@ class API:
         user_acct = self._get_user_acct()
         payload_out = payload.copy()
         payload_out["user"] = user_acct
-        payload_out["group"] = group
+        # Only set group if not already in payload
+        if "group" not in payload_out:
+            payload_out["group"] = group
+        effective_group = payload_out["group"]
 
         if "permissions" not in payload:
-            read_permissions = ["group:__world__"] if group == "__world__" else [f"group:{group}"]
+            read_permissions = ["group:__world__"] if effective_group == "__world__" else [f"group:{effective_group}"]
             payload_out["permissions"] = {
                 "read": read_permissions,
                 "update": [user_acct],
@@ -208,25 +218,30 @@ class API:
             f"{self.api_url}/annotations",
             headers=self._get_headers(),
             json=payload_out,
+            timeout=DEFAULT_TIMEOUT,
         )
         return self._handle_response(response)
 
-    def get_annotation(self, annotation_id: str) -> Dict[str, Any]:
+    def get_annotation(self, annotation_id: str, authenticated: bool = True) -> Dict[str, Any]:
         """
         Retrieve a single annotation by ID.
 
         Args:
             annotation_id: The annotation ID.
+            authenticated: Whether to send authentication headers (default: True).
+                Set to True to access private/group annotations.
 
         Returns:
             The annotation object.
 
         Raises:
             NotFoundError: If the annotation doesn't exist.
+            ForbiddenError: If the annotation is private and user lacks access.
         """
         response = requests.get(
             f"{self.api_url}/annotations/{annotation_id}",
-            headers=self._get_headers(authenticated=False),
+            headers=self._get_headers(authenticated=authenticated),
+            timeout=DEFAULT_TIMEOUT,
         )
         return self._handle_response(response)
 
@@ -252,6 +267,7 @@ class API:
             f"{self.api_url}/annotations/{annotation_id}",
             headers=self._get_headers(),
             json=payload,
+            timeout=DEFAULT_TIMEOUT,
         )
         return self._handle_response(response)
 
@@ -272,6 +288,7 @@ class API:
         response = requests.delete(
             f"{self.api_url}/annotations/{annotation_id}",
             headers=self._get_headers(),
+            timeout=DEFAULT_TIMEOUT,
         )
         return self._handle_response(response)
 
@@ -291,9 +308,8 @@ class API:
         response = requests.put(
             f"{self.api_url}/annotations/{annotation_id}/flag",
             headers=self._get_headers(),
+            timeout=DEFAULT_TIMEOUT,
         )
-        if response.status_code == 204:
-            return {}
         return self._handle_response(response)
 
     def hide(self, annotation_id: str) -> Dict[str, Any]:
@@ -312,9 +328,8 @@ class API:
         response = requests.put(
             f"{self.api_url}/annotations/{annotation_id}/hide",
             headers=self._get_headers(),
+            timeout=DEFAULT_TIMEOUT,
         )
-        if response.status_code == 204:
-            return {}
         return self._handle_response(response)
 
     def unhide(self, annotation_id: str) -> Dict[str, Any]:
@@ -333,14 +348,14 @@ class API:
         response = requests.delete(
             f"{self.api_url}/annotations/{annotation_id}/hide",
             headers=self._get_headers(),
+            timeout=DEFAULT_TIMEOUT,
         )
-        if response.status_code == 204:
-            return {}
         return self._handle_response(response)
 
     def search(
         self,
         user: Optional[str] = None,
+        authority: Optional[str] = None,
         uri: Optional[str] = None,
         url: Optional[str] = None,
         wildcard_uri: Optional[str] = None,
@@ -365,7 +380,10 @@ class API:
         yielding annotations one at a time.
 
         Args:
-            user: Filter by username (without acct: prefix).
+            user: Filter by username. Can be just username or full acct: format.
+                If just username, authority param determines the domain.
+            authority: Authority domain for user filter (default: hypothes.is).
+                Ignored if user is in full acct: format.
             uri: Filter by exact URI.
             url: Alias for uri.
             wildcard_uri: Filter by URI pattern with wildcards (*).
@@ -378,15 +396,26 @@ class API:
             references: Filter by parent annotation ID (for replies).
             sort: Sort field (created, updated, id, group, user).
             order: Sort order (asc or desc).
-            offset: Starting offset for results.
+            offset: Starting offset for results (ignored if search_after is set).
             limit: Maximum results per page (max 200).
             search_after: Pagination cursor for efficient deep pagination.
+                When set, offset-based pagination is disabled.
             **kwargs: Additional search parameters.
 
         Yields:
             Annotation objects matching the search criteria.
+
+        Raises:
+            HypothesisAPIError: If the search request fails.
+            AuthenticationError: If authentication fails.
         """
-        user_acct = self._get_user_acct(user) if user else None
+        # Handle user parameter - support both username and full acct: format
+        user_acct: Optional[str] = None
+        if user:
+            if user.startswith("acct:"):
+                user_acct = user
+            else:
+                user_acct = self._get_user_acct(user, authority=authority or "hypothes.is")
 
         search_dict: Dict[str, Any] = {
             "user": user_acct,
@@ -394,23 +423,30 @@ class API:
             "wildcard_uri": wildcard_uri,
             "text": text,
             "any": any_field,
-            "tag": tag,
             "group": group,
             "quote": quote,
             "references": references,
             "sort": sort,
             "order": order,
-            "offset": offset,
             "limit": limit,
-            "search_after": search_after,
         }
 
-        # Handle multiple tags
+        # Handle tags - Hypothesis API expects repeated tag= parameters, not tags=
+        # Build a list under "tag" key for urlencode with doseq=True
+        tag_list: List[str] = []
+        if tag:
+            tag_list.append(tag)
         if tags:
-            for tag_value in tags:
-                if "tags" not in search_dict:
-                    search_dict["tags"] = []
-                search_dict["tags"].append(tag_value)
+            tag_list.extend(tags)
+        if tag_list:
+            search_dict["tag"] = tag_list
+
+        # Handle pagination mode: cursor-based (search_after) vs offset-based
+        use_cursor_pagination = search_after is not None
+        if use_cursor_pagination:
+            search_dict["search_after"] = search_after
+        else:
+            search_dict["offset"] = offset
 
         search_dict.update(kwargs)
         search_dict = _remove_none(search_dict)
@@ -419,14 +455,28 @@ class API:
 
         while more_results:
             url_str = f"{self.api_url}/search?{urlencode(search_dict, doseq=True)}"
-            response = requests.get(url_str, headers=self._get_headers())
-            data = response.json()
+            response = requests.get(
+                url_str,
+                headers=self._get_headers(),
+                timeout=DEFAULT_TIMEOUT,
+            )
+            # Use _handle_response to properly handle errors
+            data = self._handle_response(response)
             rows = data.get("rows", [])
 
             if rows:
                 for row in rows:
                     yield row
-                search_dict["offset"] = search_dict.get("offset", 0) + limit
+
+                # Update pagination for next page
+                if use_cursor_pagination:
+                    # For cursor-based pagination, use search_after from last result
+                    last_row = rows[-1]
+                    # search_after typically uses the annotation's created timestamp + id
+                    search_dict["search_after"] = last_row.get("created", "") + last_row.get("id", "")
+                else:
+                    # For offset-based pagination, increment offset
+                    search_dict["offset"] = search_dict.get("offset", 0) + limit
             else:
                 more_results = False
 
@@ -454,7 +504,11 @@ class API:
         search_dict = _remove_none(search_dict)
 
         url = f"{self.api_url}/search?{urlencode(search_dict, doseq=True)}"
-        response = requests.get(url, headers=self._get_headers())
+        response = requests.get(
+            url,
+            headers=self._get_headers(),
+            timeout=DEFAULT_TIMEOUT,
+        )
         return self._handle_response(response)
 
     # ========== Group Endpoints ==========
@@ -488,7 +542,7 @@ class API:
         if params:
             url += f"?{urlencode(params, doseq=True)}"
 
-        response = requests.get(url, headers=self._get_headers())
+        response = requests.get(url, headers=self._get_headers(), timeout=DEFAULT_TIMEOUT)
         return self._handle_response(response)
 
     def create_group(
@@ -518,6 +572,7 @@ class API:
             f"{self.api_url}/groups",
             headers=self._get_headers(),
             json=payload,
+            timeout=DEFAULT_TIMEOUT,
         )
         return self._handle_response(response)
 
@@ -544,7 +599,7 @@ class API:
         if params:
             url += f"?{urlencode(params, doseq=True)}"
 
-        response = requests.get(url, headers=self._get_headers())
+        response = requests.get(url, headers=self._get_headers(), timeout=DEFAULT_TIMEOUT)
         return self._handle_response(response)
 
     def update_group(
@@ -574,6 +629,7 @@ class API:
             f"{self.api_url}/groups/{group_id}",
             headers=self._get_headers(),
             json=payload,
+            timeout=DEFAULT_TIMEOUT,
         )
         return self._handle_response(response)
 
@@ -590,6 +646,7 @@ class API:
         response = requests.get(
             f"{self.api_url}/groups/{group_id}/members",
             headers=self._get_headers(),
+            timeout=DEFAULT_TIMEOUT,
         )
         return self._handle_response(response)
 
@@ -606,9 +663,8 @@ class API:
         response = requests.delete(
             f"{self.api_url}/groups/{group_id}/members/me",
             headers=self._get_headers(),
+            timeout=DEFAULT_TIMEOUT,
         )
-        if response.status_code == 204:
-            return {}
         return self._handle_response(response)
 
     # ========== Profile Endpoints ==========
@@ -623,6 +679,7 @@ class API:
         response = requests.get(
             f"{self.api_url}/profile",
             headers=self._get_headers(),
+            timeout=DEFAULT_TIMEOUT,
         )
         return self._handle_response(response)
 
@@ -655,7 +712,7 @@ class API:
         if params:
             url += f"?{urlencode(params, doseq=True)}"
 
-        response = requests.get(url, headers=self._get_headers())
+        response = requests.get(url, headers=self._get_headers(), timeout=DEFAULT_TIMEOUT)
         return self._handle_response(response)
 
     # ========== User Endpoints (Admin) ==========
@@ -698,6 +755,7 @@ class API:
             f"{self.api_url}/users",
             headers=self._get_headers(),
             json=payload,
+            timeout=DEFAULT_TIMEOUT,
         )
         return self._handle_response(response)
 
@@ -714,6 +772,7 @@ class API:
         response = requests.get(
             f"{self.api_url}/users/{userid}",
             headers=self._get_headers(),
+            timeout=DEFAULT_TIMEOUT,
         )
         return self._handle_response(response)
 
@@ -744,6 +803,7 @@ class API:
             f"{self.api_url}/users/{userid}",
             headers=self._get_headers(),
             json=payload,
+            timeout=DEFAULT_TIMEOUT,
         )
         return self._handle_response(response)
 
