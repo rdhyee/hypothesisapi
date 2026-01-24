@@ -4,52 +4,90 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Python wrapper for the [Hypothesis](https://hypothes.is/) web annotation API. Enables programmatic creation, retrieval, and search of web annotations.
+Python wrapper for the [Hypothesis](https://hypothes.is/) web annotation API. Enables programmatic creation, retrieval, update, and search of web annotations.
 
 ## Common Commands
 
 ```bash
 # Install package (development)
-pip install -e .
+pip install -e ".[dev]"
 
 # Run tests
-python setup.py test
-# or
-make test
+pytest
+
+# Type checking
+mypy hypothesisapi
 
 # Lint
-make lint  # uses flake8
-
-# Build documentation
-make docs
+flake8 hypothesisapi tests
 
 # Build distribution
-make dist
+pip install build
+python -m build
 
 # Clean build artifacts
-make clean
+rm -rf build/ dist/ *.egg-info
 ```
 
 ## Architecture
 
 The library is a single-module package in `hypothesisapi/__init__.py`:
 
-- **`API` class**: Main interface for Hypothesis API interactions
-  - Constructor takes `username` and `api_key` (bearer token authentication)
-  - `create(payload)`: Create annotations (requires `uri` in payload)
-  - `get_annotation(_id)`: Retrieve single annotation by ID
-  - `search(...)`: Generator that paginates through search results (handles offset automatically)
+### Main Class: `API`
+
+Constructor: `API(username, api_key, api_url=API_URL, app_url=APP_URL)`
+
+**Annotation Methods:**
+- `create(payload, group="__world__")`: Create annotation (requires `uri` in payload)
+- `get_annotation(annotation_id)`: Retrieve single annotation by ID
+- `update(annotation_id, payload)`: Update an annotation
+- `delete(annotation_id)`: Delete an annotation
+- `flag(annotation_id)`: Flag annotation for review
+- `hide(annotation_id)`: Hide annotation (moderator)
+- `unhide(annotation_id)`: Unhide annotation (moderator)
+- `search(...)`: Generator that paginates through search results
+- `search_raw(...)`: Single-page search returning full response
+
+**Group Methods:**
+- `get_groups(authority, document_uri, expand)`: List groups
+- `create_group(name, description, groupid)`: Create private group
+- `get_group(group_id, expand)`: Get group details
+- `update_group(group_id, name, description)`: Update group
+- `get_group_members(group_id)`: List group members
+- `leave_group(group_id)`: Leave a group
+
+**Profile Methods:**
+- `get_profile()`: Get current user's profile
+- `get_profile_groups(...)`: Get user's groups
+
+**User Methods (Admin):**
+- `create_user(authority, username, email, ...)`: Create user
+- `get_user(userid)`: Get user by ID
+- `update_user(userid, email, display_name)`: Update user
+
+### Custom Exceptions
+
+- `HypothesisAPIError`: Base exception
+- `AuthenticationError`: 401 errors
+- `NotFoundError`: 404 errors
+- `ForbiddenError`: 403 errors (named to avoid shadowing Python's builtin `PermissionError`)
 
 ## Authentication
 
-Uses Bearer token authentication via Hypothesis API keys (not username/password login). Get your API key from https://hypothes.is/account/developer
+Uses Bearer token authentication via Hypothesis API keys. Get your API key from https://hypothes.is/account/developer
+
+## API Version
+
+This library uses **Hypothesis API v1.0** (the current stable version). API v2.0 is experimental and under development.
 
 ## Key API Endpoints
 
 - Base API URL: `https://hypothes.is/api`
-- Create annotation: `POST /annotations`
-- Get annotation: `GET /annotations/:id`
-- Search: `GET /search?{params}`
+- Annotations: `/annotations`, `/annotations/:id`, `/annotations/:id/flag`, `/annotations/:id/hide`
+- Groups: `/groups`, `/groups/:id`, `/groups/:id/members`
+- Profile: `/profile`, `/profile/groups`
+- Users: `/users`, `/users/:userid`
+- Search: `/search?{params}`
 
 ## Example Usage
 
@@ -68,4 +106,25 @@ result = api.create({
 # Search annotations
 for annotation in api.search(user="username", uri="https://example.com"):
     print(annotation)
+
+# Update annotation
+api.update("annotation_id", {"text": "Updated text"})
+
+# Delete annotation
+api.delete("annotation_id")
+
+# Work with groups
+groups = api.get_groups()
+new_group = api.create_group("My Group", description="A test group")
+
+# Get profile
+profile = api.get_profile()
 ```
+
+## Testing
+
+Tests are in the `tests/` directory. Run with `pytest`.
+
+## Type Hints
+
+The package is fully typed. Use `mypy hypothesisapi` to check types. A `py.typed` marker file is included.
