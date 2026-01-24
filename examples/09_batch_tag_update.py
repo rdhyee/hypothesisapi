@@ -145,8 +145,8 @@ def main():
         try:
             response = input("Delete all test annotations? [y/N]: ")
         except EOFError:
-            response = "y"
-            print("(non-interactive mode, auto-deleting)")
+            response = "n"
+            print("(non-interactive mode, keeping annotations)")
 
         if response.lower() == "y":
             for ann_id in annotation_ids:

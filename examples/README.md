@@ -205,6 +205,17 @@ from _common import (
 )
 ```
 
+## Limitations
+
+These examples prioritize clarity over comprehensive error handling. Known limitations:
+
+- **URLs must include scheme**: Pass full URLs like `https://example.com`, not `example.com`
+- **Assumes valid API responses**: Examples don't guard against malformed responses; the underlying library handles errors
+- **Hardcoded authority**: `format_user_for_search()` assumes `hypothes.is`; modify for custom Hypothesis instances
+- **Memory usage**: Export example loads all annotations into memory; use smaller limits for large collections
+
+For production use, add appropriate input validation and error handling. The `hypothesisapi` library itself handles API errors robustly.
+
 ## Contributing
 
 When adding new examples:
