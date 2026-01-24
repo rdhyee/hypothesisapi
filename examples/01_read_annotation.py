@@ -33,29 +33,10 @@ Sample Output:
     ============================================================
 """
 
-import os
 import sys
 
-# Add parent directory to path for local development
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from hypothesisapi import API, HypothesisAPIError, NotFoundError
-
-# Fixture discovery tag
-FIXTURE_TAG = "hypothesisapi-example"
-
-
-def get_api():
-    """Initialize the Hypothesis API client."""
-    api_key = os.environ.get("HYPOTHESIS_API_KEY")
-    username = os.environ.get("HYPOTHESIS_USERNAME", "")
-
-    if not api_key:
-        print("Error: HYPOTHESIS_API_KEY environment variable not set.")
-        print("Get your API key from: https://hypothes.is/account/developer")
-        sys.exit(1)
-
-    return API(username=username, api_key=api_key)
+from _common import get_api, extract_quote, FIXTURE_TAG
+from hypothesisapi import HypothesisAPIError, NotFoundError
 
 
 def format_annotation(annotation):
@@ -63,12 +44,12 @@ def format_annotation(annotation):
     print("=" * 60)
     print("Annotation Details")
     print("=" * 60)
-    print(f"ID:       {annotation['id']}")
-    print(f"Created:  {annotation['created']}")
-    print(f"Updated:  {annotation['updated']}")
-    print(f"User:     {annotation['user']}")
+    print(f"ID:       {annotation.get('id', '(unknown)')}")
+    print(f"Created:  {annotation.get('created', '(unknown)')}")
+    print(f"Updated:  {annotation.get('updated', '(unknown)')}")
+    print(f"User:     {annotation.get('user', '(unknown)')}")
     print()
-    print(f"URI:      {annotation['uri']}")
+    print(f"URI:      {annotation.get('uri', '(unknown)')}")
 
     # Display document title if available
     doc = annotation.get("document", {})
@@ -98,15 +79,11 @@ def format_annotation(annotation):
         print("Tags:     (none)")
 
     # Display quote if present (highlighted text)
-    targets = annotation.get("target", [])
-    for target in targets:
-        for selector in target.get("selector", []):
-            if selector.get("type") == "TextQuoteSelector":
-                exact = selector.get("exact", "")
-                if exact:
-                    print()
-                    print("Highlighted text:")
-                    print(f'  "{exact}"')
+    quote = extract_quote(annotation)
+    if quote:
+        print()
+        print("Highlighted text:")
+        print(f'  "{quote}"')
 
     # Display group
     group = annotation.get("group", "__world__")
@@ -114,8 +91,10 @@ def format_annotation(annotation):
     print(f"Group:    {group}")
 
     # Display link
-    print()
-    print(f"View at:  https://hypothes.is/a/{annotation['id']}")
+    ann_id = annotation.get('id', '')
+    if ann_id:
+        print()
+        print(f"View at:  https://hypothes.is/a/{ann_id}")
     print("=" * 60)
 
 
@@ -132,7 +111,7 @@ def main():
         print()
         fixtures = list(api.search(tag=FIXTURE_TAG, limit=5))
         if fixtures:
-            annotation_id = fixtures[0]["id"]
+            annotation_id = fixtures[0].get("id")
             print(f"Found {len(fixtures)} fixture(s). Using first one: {annotation_id}")
             print()
         else:

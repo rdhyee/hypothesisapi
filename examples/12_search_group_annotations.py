@@ -33,66 +33,24 @@ Sample Output:
     ============================================================
 """
 
-import os
 import sys
-from datetime import datetime
 
-# Add parent directory to path for local development
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from hypothesisapi import API, HypothesisAPIError
-
-
-def get_api():
-    """Initialize the Hypothesis API client."""
-    api_key = os.environ.get("HYPOTHESIS_API_KEY")
-    username = os.environ.get("HYPOTHESIS_USERNAME", "")
-
-    if not api_key:
-        print("Error: HYPOTHESIS_API_KEY environment variable not set.")
-        print("Get your API key from: https://hypothes.is/account/developer")
-        sys.exit(1)
-
-    return API(username=username, api_key=api_key)
-
-
-def parse_date(iso_string):
-    """Parse ISO date string to readable date."""
-    try:
-        if "." in iso_string:
-            dt = datetime.fromisoformat(iso_string.replace("+00:00", "").split(".")[0])
-        else:
-            dt = datetime.fromisoformat(iso_string.replace("+00:00", "").replace("Z", ""))
-        return dt.strftime("%Y-%m-%d")
-    except (ValueError, AttributeError):
-        return "unknown"
-
-
-def truncate(text, max_length=55):
-    """Truncate text to max length with ellipsis."""
-    if not text:
-        return "(no text)"
-    text = text.replace("\n", " ").strip()
-    if len(text) > max_length:
-        return text[:max_length - 3] + "..."
-    return text
+from _common import get_api, parse_date, format_date, truncate, extract_username
+from hypothesisapi import HypothesisAPIError
 
 
 def display_annotation(index, ann):
     """Display a single annotation in summary format."""
-    ann_id = ann["id"][:6]
-    user = ann.get("user", "unknown")
-    if user.startswith("acct:"):
-        user = user.split(":")[1].split("@")[0]
+    ann_id = ann.get("id", "unknown")[:6]
+    user = extract_username(ann.get("user"))
 
-    date = parse_date(ann.get("created", ""))
-    uri = ann.get("uri", "")
-    if len(uri) > 50:
-        uri = uri[:47] + "..."
-    text = truncate(ann.get("text", ""))
+    created = parse_date(ann.get("created", ""))
+    date_str = format_date(created, "%Y-%m-%d") if created else "unknown"
+    uri = truncate(ann.get("uri", ""), 50)
+    text = truncate(ann.get("text", ""), 55)
     tags = ann.get("tags", [])
 
-    print(f"\n{index}. [{ann_id}] {date} by {user}")
+    print(f"\n{index}. [{ann_id}] {date_str} by {user}")
     print(f"   {uri}")
     print(f"   {text}")
     if tags:

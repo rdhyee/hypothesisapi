@@ -28,7 +28,6 @@ Sample Output:
       highlight: 1
       multi-tag: 1
       reply: 1
-      private: 1
 
     Date Range:
       Earliest: 2024-01-15
@@ -37,49 +36,15 @@ Sample Output:
     Content Types:
       With text: 5
       Highlights only: 0
-      With replies: 1
+      Replies: 1
     ============================================================
 """
 
-import os
 import sys
 from collections import Counter
-from datetime import datetime
 
-# Add parent directory to path for local development
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from hypothesisapi import API, HypothesisAPIError
-
-# Fixture discovery tag
-FIXTURE_TAG = "hypothesisapi-example"
-
-
-def get_api():
-    """Initialize the Hypothesis API client."""
-    api_key = os.environ.get("HYPOTHESIS_API_KEY")
-    username = os.environ.get("HYPOTHESIS_USERNAME", "")
-
-    if not api_key:
-        print("Error: HYPOTHESIS_API_KEY environment variable not set.")
-        print("Get your API key from: https://hypothes.is/account/developer")
-        sys.exit(1)
-
-    return API(username=username, api_key=api_key)
-
-
-def parse_date(iso_string):
-    """Parse ISO date string to timezone-aware datetime, return date in UTC."""
-    if not iso_string:
-        return None
-    try:
-        # Normalize Z suffix to +00:00 for fromisoformat
-        normalized = iso_string.replace("Z", "+00:00")
-        dt = datetime.fromisoformat(normalized)
-        # Return UTC date to avoid timezone shift issues
-        return dt.date()
-    except (ValueError, AttributeError):
-        return None
+from _common import get_api, parse_date, extract_username, truncate, FIXTURE_TAG
+from hypothesisapi import HypothesisAPIError
 
 
 def calculate_stats(annotations):
@@ -92,18 +57,16 @@ def calculate_stats(annotations):
         "dates": [],
         "with_text": 0,
         "highlights_only": 0,
-        "with_replies": 0,
+        "replies": 0,  # Annotations that ARE replies (have references)
         "uris": Counter(),
+        "uri_display": {},  # Map full URI to truncated display version
     }
 
     for ann in annotations:
         stats["total"] += 1
 
         # User stats
-        user = ann.get("user", "unknown")
-        # Extract username from acct:username@domain format
-        if user.startswith("acct:"):
-            user = user.split(":")[1].split("@")[0]
+        user = extract_username(ann.get("user"))
         stats["users"][user] += 1
 
         # Tag stats
@@ -117,7 +80,7 @@ def calculate_stats(annotations):
         # Date stats
         created = parse_date(ann.get("created", ""))
         if created:
-            stats["dates"].append(created)
+            stats["dates"].append(created.date() if hasattr(created, 'date') else created)
 
         # Content type stats
         text = ann.get("text", "").strip()
@@ -126,16 +89,15 @@ def calculate_stats(annotations):
         else:
             stats["highlights_only"] += 1
 
-        # Reply stats
+        # Reply stats (annotations that ARE replies, not that HAVE replies)
         if ann.get("references"):
-            stats["with_replies"] += 1
+            stats["replies"] += 1
 
-        # URI stats
+        # URI stats - count with full URI, store truncated for display
         uri = ann.get("uri", "unknown")
-        # Truncate long URIs for display
-        if len(uri) > 50:
-            uri = uri[:47] + "..."
         stats["uris"][uri] += 1
+        if uri not in stats["uri_display"]:
+            stats["uri_display"][uri] = truncate(uri, 50)
 
     return stats
 
@@ -180,13 +142,14 @@ def display_stats(stats, tag):
     print("\nContent Types:")
     print(f"  With text: {stats['with_text']}")
     print(f"  Highlights only: {stats['highlights_only']}")
-    print(f"  Replies: {stats['with_replies']}")
+    print(f"  Replies: {stats['replies']}")
 
     # URIs (if multiple)
     if len(stats["uris"]) > 1:
         print("\nBy URI:")
         for uri, count in stats["uris"].most_common(5):
-            print(f"  {uri}: {count}")
+            display_uri = stats["uri_display"].get(uri, uri)
+            print(f"  {display_uri}: {count}")
 
     print("=" * 60)
 

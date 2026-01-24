@@ -83,7 +83,7 @@ This creates 5 fixture annotations:
 2. **Highlight** - Text anchored with a comment
 3. **Multi-tag** - Annotation with multiple tags
 4. **Reply** - A reply to another annotation
-5. **Private demo** - Demonstrates private annotations
+5. **Visibility demo** - Documents privacy options (PUBLIC annotation)
 
 See [FIXTURES.md](FIXTURES.md) for fixture annotation IDs.
 
@@ -187,12 +187,31 @@ The Hypothesis API has rate limits. If you hit them:
 - Reduce the frequency of API calls
 - Use pagination with reasonable limits
 
+## Shared Helpers
+
+The `_common.py` module provides shared utilities used across examples:
+
+```python
+from _common import (
+    get_api,              # Initialize API from environment
+    parse_date,           # Parse ISO dates (timezone-aware)
+    format_date,          # Format datetime for display
+    extract_username,     # Extract username from acct:user@domain
+    format_user_for_search,  # Format username for API search
+    truncate,             # Truncate text with ellipsis
+    extract_quote,        # Get highlighted text from annotation
+    FIXTURE_TAG,          # Common fixture tag
+    WIKIPEDIA_URL,        # Fixture target URL
+)
+```
+
 ## Contributing
 
 When adding new examples:
 
 1. Follow the naming convention: `XX_descriptive_name.py`
 2. Include a comprehensive docstring with usage and sample output
-3. Support `HYPOTHESIS_API_KEY` environment variable
-4. Include error handling for common cases
-5. For write operations, include cleanup options
+3. Use helpers from `_common.py` to reduce duplication
+4. Support `HYPOTHESIS_API_KEY` environment variable
+5. Include error handling for common cases
+6. For write operations, include cleanup options

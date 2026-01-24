@@ -36,61 +36,18 @@ Sample Output:
 
 import os
 import sys
-from datetime import datetime
 
-# Add parent directory to path for local development
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from hypothesisapi import API, HypothesisAPIError
-
-
-def get_api():
-    """Initialize the Hypothesis API client."""
-    api_key = os.environ.get("HYPOTHESIS_API_KEY")
-    username = os.environ.get("HYPOTHESIS_USERNAME", "")
-
-    if not api_key:
-        print("Error: HYPOTHESIS_API_KEY environment variable not set.")
-        print("Get your API key from: https://hypothes.is/account/developer")
-        sys.exit(1)
-
-    return API(username=username, api_key=api_key), username
-
-
-def parse_datetime(iso_string):
-    """Parse ISO datetime string to readable format."""
-    try:
-        if "." in iso_string:
-            dt = datetime.fromisoformat(iso_string.replace("+00:00", "").split(".")[0])
-        else:
-            dt = datetime.fromisoformat(iso_string.replace("+00:00", "").replace("Z", ""))
-        return dt.strftime("%Y-%m-%d %H:%M")
-    except (ValueError, AttributeError):
-        return "unknown"
-
-
-def truncate(text, max_length=60):
-    """Truncate text to max length with ellipsis."""
-    if not text:
-        return ""
-    text = text.replace("\n", " ").strip()
-    if len(text) > max_length:
-        return text[:max_length - 3] + "..."
-    return text
-
-
-def extract_quote(annotation):
-    """Extract highlighted text from annotation selectors."""
-    for target in annotation.get("target", []):
-        for selector in target.get("selector", []):
-            if selector.get("type") == "TextQuoteSelector":
-                return selector.get("exact", "")
-    return ""
+from _common import (
+    get_api, parse_date, format_date, truncate, extract_quote,
+    format_user_for_search
+)
+from hypothesisapi import HypothesisAPIError
 
 
 def display_annotation(index, ann):
     """Display a single annotation with full context."""
-    created = parse_datetime(ann.get("created", ""))
+    created = parse_date(ann.get("created", ""))
+    created_str = format_date(created, "%Y-%m-%d %H:%M") if created else "unknown"
 
     # Get document title
     doc = ann.get("document", {})
@@ -105,13 +62,13 @@ def display_annotation(index, ann):
     tags = ann.get("tags", [])
 
     # Header with date and title
-    header = f"{created}"
+    header = f"{created_str}"
     if title:
         header += f" | {title}"
     print(f"\n{index}. {header}")
 
     # URI
-    display_uri = uri if len(uri) <= 60 else uri[:57] + "..."
+    display_uri = truncate(uri, 60)
     print(f"   {display_uri}")
 
     # Quote (highlighted text)
@@ -127,11 +84,14 @@ def display_annotation(index, ann):
         print(f"   Tags: {', '.join(tags[:5])}")
 
     # Link
-    print(f"   View: https://hypothes.is/a/{ann['id']}")
+    ann_id = ann.get('id', '')
+    if ann_id:
+        print(f"   View: https://hypothes.is/a/{ann_id}")
 
 
 def main():
-    api, default_username = get_api()
+    api = get_api()
+    default_username = os.environ.get("HYPOTHESIS_USERNAME", "")
 
     # Get username from command line or use default
     if len(sys.argv) > 1:
@@ -150,9 +110,12 @@ def main():
     print("=" * 60)
 
     try:
+        # Format username for API search (expects acct:user@hypothes.is)
+        user_query = format_user_for_search(username)
+
         # Search for recent annotations by user, sorted by creation date
         annotations = list(api.search(
-            user=username,
+            user=user_query,
             limit=10,
             sort="created",
             order="desc"
@@ -171,10 +134,9 @@ def main():
         print()
         print("=" * 60)
 
-        # Summary statistics
-        total_result = api.search_raw(user=username, limit=1)
-        total_count = total_result.get("total", len(annotations))
-        print(f"\nTotal annotations by {username}: {total_count}")
+        # Summary statistics (reuse the search we already did)
+        total_count = len(annotations)  # We have limit=10, so this is just a sample
+        print(f"\nShowing {total_count} most recent (of potentially more)")
 
         # Count unique URIs
         unique_uris = set(ann.get("uri", "") for ann in annotations)
@@ -185,7 +147,7 @@ def main():
         for ann in annotations:
             all_tags.extend(ann.get("tags", []))
         if all_tags:
-            print(f"Total tags used: {len(set(all_tags))}")
+            print(f"Unique tags used: {len(set(all_tags))}")
 
         print("=" * 60)
 

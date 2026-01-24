@@ -36,59 +36,21 @@ Sample Output:
     Found 12 total annotations on en.wikipedia.org
 """
 
-import os
 import sys
 from urllib.parse import urlparse
 
-# Add parent directory to path for local development
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from hypothesisapi import API, HypothesisAPIError
-
-# Wikipedia fixture URL
-WIKIPEDIA_URL = "https://en.wikipedia.org/w/index.php?title=Web_annotation&oldid=1318004643"
-
-
-def get_api():
-    """Initialize the Hypothesis API client."""
-    api_key = os.environ.get("HYPOTHESIS_API_KEY")
-    username = os.environ.get("HYPOTHESIS_USERNAME", "")
-
-    if not api_key:
-        print("Error: HYPOTHESIS_API_KEY environment variable not set.")
-        print("Get your API key from: https://hypothes.is/account/developer")
-        sys.exit(1)
-
-    return API(username=username, api_key=api_key)
-
-
-def truncate(text, max_length=60):
-    """Truncate text to max length with ellipsis."""
-    if not text:
-        return "(no text)"
-    text = text.replace("\n", " ").strip()
-    if len(text) > max_length:
-        return text[:max_length - 3] + "..."
-    return text
+from _common import get_api, truncate, extract_username, extract_quote, WIKIPEDIA_URL
+from hypothesisapi import HypothesisAPIError
 
 
 def display_annotation(index, ann):
     """Display a single annotation in summary format."""
-    ann_id = ann["id"][:7]  # Short ID
-    user = ann.get("user", "unknown")
-    if user.startswith("acct:"):
-        user = user.split(":")[1].split("@")[0]
+    ann_id = ann.get("id", "unknown")[:7]
+    user = extract_username(ann.get("user"))
 
     text = ann.get("text", "")
     tags = ann.get("tags", [])
-
-    # Check for highlighted text
-    quote = ""
-    for target in ann.get("target", []):
-        for selector in target.get("selector", []):
-            if selector.get("type") == "TextQuoteSelector":
-                quote = selector.get("exact", "")
-                break
+    quote = extract_quote(ann)
 
     # Format the display
     ann_type = "Highlight" if quote else "Page note"
@@ -144,8 +106,9 @@ def main():
         for scheme in ["https", "http"]:
             wildcard_pattern = f"{scheme}://{domain}/*"
             for ann in api.search(wildcard_uri=wildcard_pattern, limit=20):
-                if ann.get("id") not in seen_ids:
-                    seen_ids.add(ann.get("id"))
+                ann_id = ann.get("id")
+                if ann_id and ann_id not in seen_ids:
+                    seen_ids.add(ann_id)
                     wildcard_annotations.append(ann)
 
         if wildcard_annotations:
@@ -161,7 +124,7 @@ def main():
         print("-" * 60)
         print("Search Tips:")
         print("  - Use exact URI for specific page annotations")
-        print("  - Use wildcard_uri='http://domain.com/*' for site-wide search")
+        print("  - Use wildcard_uri='https://domain.com/*' for site-wide search")
         print("  - Combine with user= or tag= for filtered results")
         print("-" * 60)
 

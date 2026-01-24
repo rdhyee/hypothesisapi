@@ -32,51 +32,16 @@ Sample Output:
       id, created, updated, user, uri, text, tags, quote, group
 """
 
-import os
-import sys
 import json
 import csv
 import argparse
 from datetime import datetime
 
-# Add parent directory to path for local development
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from hypothesisapi import API, HypothesisAPIError
-
-# Fixture discovery tag
-FIXTURE_TAG = "hypothesisapi-example"
-
-
-def get_api():
-    """Initialize the Hypothesis API client."""
-    api_key = os.environ.get("HYPOTHESIS_API_KEY")
-    username = os.environ.get("HYPOTHESIS_USERNAME", "")
-
-    if not api_key:
-        print("Error: HYPOTHESIS_API_KEY environment variable not set.")
-        print("Get your API key from: https://hypothes.is/account/developer")
-        sys.exit(1)
-
-    return API(username=username, api_key=api_key)
-
-
-def extract_quote(annotation):
-    """Extract highlighted text from annotation selectors."""
-    for target in annotation.get("target", []):
-        for selector in target.get("selector", []):
-            if selector.get("type") == "TextQuoteSelector":
-                return selector.get("exact", "")
-    return ""
-
-
-def extract_username(user_string):
-    """Extract username from acct:username@domain format."""
-    if not user_string:
-        return "(unknown)"
-    if user_string.startswith("acct:"):
-        return user_string.split(":")[1].split("@")[0]
-    return user_string
+from _common import (
+    get_api, extract_quote, extract_username, format_user_for_search,
+    FIXTURE_TAG
+)
+from hypothesisapi import HypothesisAPIError
 
 
 def export_json(annotations, filename):
@@ -117,7 +82,7 @@ def export_csv(annotations, filename):
                 "id": ann.get("id", ""),
                 "created": ann.get("created", ""),
                 "updated": ann.get("updated", ""),
-                "user": extract_username(ann.get("user", "")),
+                "user": extract_username(ann.get("user")),
                 "uri": ann.get("uri", ""),
                 "title": title,
                 "text": ann.get("text", "").replace("\n", " "),
@@ -156,7 +121,8 @@ def main():
         # Build search parameters
         search_kwargs = {"tag": args.tag, "limit": args.limit}
         if args.user:
-            search_kwargs["user"] = args.user
+            # Format username for API (expects acct:user@hypothes.is)
+            search_kwargs["user"] = format_user_for_search(args.user)
             print(f"  Filtered by user: {args.user}")
         if args.uri:
             search_kwargs["uri"] = args.uri
@@ -168,7 +134,7 @@ def main():
         if not annotations:
             print(f"\nNo annotations found with tag '{args.tag}'.")
             print("Tip: Run setup_fixtures.py to create fixture annotations.")
-            sys.exit(0)
+            return
 
         print(f"Found {len(annotations)} annotation(s)")
         print()
@@ -204,7 +170,7 @@ def main():
 
     except HypothesisAPIError as e:
         print(f"Error: {e}")
-        sys.exit(1)
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
