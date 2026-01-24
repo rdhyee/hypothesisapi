@@ -13,10 +13,21 @@ __author__ = "Raymond Yee"
 __email__ = "raymond.yee@gmail.com"
 __version__ = "0.4.0"
 
-from typing import Any, Dict, Generator, Iterator, List, Optional, Union
+import warnings
+from typing import Any, Dict, Generator, List, Optional
 from urllib.parse import urlencode
 
 import requests
+
+__all__ = [
+    "API",
+    "API_URL",
+    "APP_URL",
+    "HypothesisAPIError",
+    "AuthenticationError",
+    "NotFoundError",
+    "ForbiddenError",
+]
 
 APP_URL = "https://hypothes.is/app"
 API_URL = "https://hypothes.is/api"
@@ -46,8 +57,8 @@ class NotFoundError(HypothesisAPIError):
     pass
 
 
-class PermissionError(HypothesisAPIError):
-    """Raised when user lacks permission for an action."""
+class ForbiddenError(HypothesisAPIError):
+    """Raised when user lacks permission for an action (403 Forbidden)."""
     pass
 
 
@@ -117,7 +128,7 @@ class API:
                 response=response.text,
             )
         elif response.status_code == 403:
-            raise PermissionError(
+            raise ForbiddenError(
                 "Permission denied for this action.",
                 status_code=response.status_code,
                 response=response.text,
@@ -235,7 +246,7 @@ class API:
 
         Raises:
             NotFoundError: If the annotation doesn't exist.
-            PermissionError: If user doesn't have update permission.
+            ForbiddenError: If user doesn't have update permission.
         """
         response = requests.patch(
             f"{self.api_url}/annotations/{annotation_id}",
@@ -256,7 +267,7 @@ class API:
 
         Raises:
             NotFoundError: If the annotation doesn't exist.
-            PermissionError: If user doesn't have delete permission.
+            ForbiddenError: If user doesn't have delete permission.
         """
         response = requests.delete(
             f"{self.api_url}/annotations/{annotation_id}",
@@ -296,7 +307,7 @@ class API:
             Empty dict on success.
 
         Raises:
-            PermissionError: If user is not a moderator.
+            ForbiddenError: If user is not a moderator.
         """
         response = requests.put(
             f"{self.api_url}/annotations/{annotation_id}/hide",
@@ -317,7 +328,7 @@ class API:
             Empty dict on success.
 
         Raises:
-            PermissionError: If user is not a moderator.
+            ForbiddenError: If user is not a moderator.
         """
         response = requests.delete(
             f"{self.api_url}/annotations/{annotation_id}/hide",
@@ -745,7 +756,6 @@ class API:
         .. deprecated::
             Use get_annotation() instead.
         """
-        import warnings
         warnings.warn(
             "search_id() is deprecated, use get_annotation() instead",
             DeprecationWarning,

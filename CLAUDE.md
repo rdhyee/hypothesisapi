@@ -70,7 +70,7 @@ Constructor: `API(username, api_key, api_url=API_URL, app_url=APP_URL)`
 - `HypothesisAPIError`: Base exception
 - `AuthenticationError`: 401 errors
 - `NotFoundError`: 404 errors
-- `PermissionError`: 403 errors
+- `ForbiddenError`: 403 errors (named to avoid shadowing Python's builtin `PermissionError`)
 
 ## Authentication
 

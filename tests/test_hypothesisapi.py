@@ -9,7 +9,7 @@ Tests for `hypothesisapi` module.
 """
 
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, call
 
 from hypothesisapi import (
     API,
@@ -18,7 +18,7 @@ from hypothesisapi import (
     HypothesisAPIError,
     AuthenticationError,
     NotFoundError,
-    PermissionError,
+    ForbiddenError,
 )
 
 
@@ -100,11 +100,11 @@ class TestAPIResponseHandling(unittest.TestCase):
         with self.assertRaises(AuthenticationError):
             self.api._handle_response(mock_response)
 
-    def test_handle_response_permission_error(self):
+    def test_handle_response_forbidden_error(self):
         mock_response = Mock()
         mock_response.status_code = 403
         mock_response.text = "Forbidden"
-        with self.assertRaises(PermissionError):
+        with self.assertRaises(ForbiddenError):
             self.api._handle_response(mock_response)
 
     def test_handle_response_not_found(self):
@@ -144,6 +144,297 @@ class TestAPICreate(unittest.TestCase):
         self.assertEqual(result["id"], "abc123")
         mock_post.assert_called_once()
 
+    @patch("hypothesisapi.requests.post")
+    def test_create_with_group(self, mock_post):
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"id": "abc123", "group": "mygroup"}
+        mock_post.return_value = mock_response
+
+        result = self.api.create({"uri": "https://example.com"}, group="mygroup")
+        self.assertEqual(result["group"], "mygroup")
+        # Verify the group was passed in the payload
+        call_args = mock_post.call_args
+        payload = call_args.kwargs["json"]
+        self.assertEqual(payload["group"], "mygroup")
+
+
+class TestAPISearch(unittest.TestCase):
+    """Tests for search functionality including pagination."""
+
+    def setUp(self):
+        self.api = API(username="testuser", api_key="testkey")
+
+    @patch("hypothesisapi.requests.get")
+    def test_search_single_page(self, mock_get):
+        """Test search with results fitting in one page."""
+        # First call returns results, second call returns empty (pagination check)
+        mock_response_page1 = Mock()
+        mock_response_page1.status_code = 200
+        mock_response_page1.json.return_value = {
+            "rows": [{"id": "1"}, {"id": "2"}],
+            "total": 2,
+        }
+
+        mock_response_page2 = Mock()
+        mock_response_page2.status_code = 200
+        mock_response_page2.json.return_value = {"rows": [], "total": 2}
+
+        mock_get.side_effect = [mock_response_page1, mock_response_page2]
+
+        results = list(self.api.search(user="testuser"))
+        self.assertEqual(len(results), 2)
+        self.assertEqual(results[0]["id"], "1")
+        self.assertEqual(results[1]["id"], "2")
+
+    @patch("hypothesisapi.requests.get")
+    def test_search_pagination(self, mock_get):
+        """Test search handles pagination correctly."""
+        # First page returns results, second page is empty
+        mock_response_page1 = Mock()
+        mock_response_page1.status_code = 200
+        mock_response_page1.json.return_value = {
+            "rows": [{"id": "1"}, {"id": "2"}],
+            "total": 2,
+        }
+
+        mock_response_page2 = Mock()
+        mock_response_page2.status_code = 200
+        mock_response_page2.json.return_value = {"rows": [], "total": 2}
+
+        mock_get.side_effect = [mock_response_page1, mock_response_page2]
+
+        results = list(self.api.search(user="testuser", limit=2))
+        self.assertEqual(len(results), 2)
+        # Should have made 2 calls (first page + check for more)
+        self.assertEqual(mock_get.call_count, 2)
+
+    @patch("hypothesisapi.requests.get")
+    def test_search_with_uri(self, mock_get):
+        """Test search with URI filter."""
+        mock_response_page1 = Mock()
+        mock_response_page1.status_code = 200
+        mock_response_page1.json.return_value = {"rows": [{"id": "1"}], "total": 1}
+
+        mock_response_page2 = Mock()
+        mock_response_page2.status_code = 200
+        mock_response_page2.json.return_value = {"rows": [], "total": 1}
+
+        mock_get.side_effect = [mock_response_page1, mock_response_page2]
+
+        list(self.api.search(uri="https://example.com"))
+        # Check the first call's URL contains the uri parameter
+        call_url = mock_get.call_args_list[0][0][0]
+        self.assertIn("uri=https", call_url)
+
+    @patch("hypothesisapi.requests.get")
+    def test_search_empty_results(self, mock_get):
+        """Test search with no results."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"rows": [], "total": 0}
+        mock_get.return_value = mock_response
+
+        results = list(self.api.search(user="nonexistent"))
+        self.assertEqual(len(results), 0)
+
+
+class TestAPIAnnotationOperations(unittest.TestCase):
+    """Tests for annotation CRUD operations."""
+
+    def setUp(self):
+        self.api = API(username="testuser", api_key="testkey")
+
+    @patch("hypothesisapi.requests.get")
+    def test_get_annotation(self, mock_get):
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"id": "abc123", "text": "Test"}
+        mock_get.return_value = mock_response
+
+        result = self.api.get_annotation("abc123")
+        self.assertEqual(result["id"], "abc123")
+
+    @patch("hypothesisapi.requests.patch")
+    def test_update_annotation(self, mock_patch):
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"id": "abc123", "text": "Updated"}
+        mock_patch.return_value = mock_response
+
+        result = self.api.update("abc123", {"text": "Updated"})
+        self.assertEqual(result["text"], "Updated")
+
+    @patch("hypothesisapi.requests.delete")
+    def test_delete_annotation(self, mock_delete):
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"id": "abc123", "deleted": True}
+        mock_delete.return_value = mock_response
+
+        result = self.api.delete("abc123")
+        self.assertTrue(result["deleted"])
+
+    @patch("hypothesisapi.requests.put")
+    def test_flag_annotation(self, mock_put):
+        mock_response = Mock()
+        mock_response.status_code = 204
+        mock_put.return_value = mock_response
+
+        result = self.api.flag("abc123")
+        self.assertEqual(result, {})
+
+    @patch("hypothesisapi.requests.put")
+    def test_hide_annotation(self, mock_put):
+        mock_response = Mock()
+        mock_response.status_code = 204
+        mock_put.return_value = mock_response
+
+        result = self.api.hide("abc123")
+        self.assertEqual(result, {})
+
+
+class TestAPIGroups(unittest.TestCase):
+    """Tests for group operations."""
+
+    def setUp(self):
+        self.api = API(username="testuser", api_key="testkey")
+
+    @patch("hypothesisapi.requests.get")
+    def test_get_groups(self, mock_get):
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = [{"id": "group1"}, {"id": "group2"}]
+        mock_get.return_value = mock_response
+
+        result = self.api.get_groups()
+        self.assertEqual(len(result), 2)
+
+    @patch("hypothesisapi.requests.post")
+    def test_create_group(self, mock_post):
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"id": "newgroup", "name": "Test Group"}
+        mock_post.return_value = mock_response
+
+        result = self.api.create_group("Test Group", description="A test group")
+        self.assertEqual(result["name"], "Test Group")
+
+    @patch("hypothesisapi.requests.get")
+    def test_get_group(self, mock_get):
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"id": "group1", "name": "Test Group"}
+        mock_get.return_value = mock_response
+
+        result = self.api.get_group("group1")
+        self.assertEqual(result["id"], "group1")
+
+    @patch("hypothesisapi.requests.patch")
+    def test_update_group(self, mock_patch):
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"id": "group1", "name": "Updated Name"}
+        mock_patch.return_value = mock_response
+
+        result = self.api.update_group("group1", name="Updated Name")
+        self.assertEqual(result["name"], "Updated Name")
+
+    @patch("hypothesisapi.requests.get")
+    def test_get_group_members(self, mock_get):
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = [{"userid": "user1"}, {"userid": "user2"}]
+        mock_get.return_value = mock_response
+
+        result = self.api.get_group_members("group1")
+        self.assertEqual(len(result), 2)
+
+    @patch("hypothesisapi.requests.delete")
+    def test_leave_group(self, mock_delete):
+        mock_response = Mock()
+        mock_response.status_code = 204
+        mock_delete.return_value = mock_response
+
+        result = self.api.leave_group("group1")
+        self.assertEqual(result, {})
+
+
+class TestAPIProfile(unittest.TestCase):
+    """Tests for profile operations."""
+
+    def setUp(self):
+        self.api = API(username="testuser", api_key="testkey")
+
+    @patch("hypothesisapi.requests.get")
+    def test_get_profile(self, mock_get):
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"userid": "acct:testuser@hypothes.is"}
+        mock_get.return_value = mock_response
+
+        result = self.api.get_profile()
+        self.assertIn("userid", result)
+
+    @patch("hypothesisapi.requests.get")
+    def test_get_profile_groups(self, mock_get):
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = [{"id": "group1"}]
+        mock_get.return_value = mock_response
+
+        result = self.api.get_profile_groups()
+        self.assertEqual(len(result), 1)
+
+
+class TestAPIUsers(unittest.TestCase):
+    """Tests for user operations (admin)."""
+
+    def setUp(self):
+        self.api = API(username="testuser", api_key="testkey")
+
+    @patch("hypothesisapi.requests.post")
+    def test_create_user(self, mock_post):
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "userid": "acct:newuser@myauthority.com",
+            "username": "newuser",
+        }
+        mock_post.return_value = mock_response
+
+        result = self.api.create_user(
+            authority="myauthority.com",
+            username="newuser",
+            email="newuser@example.com",
+        )
+        self.assertEqual(result["username"], "newuser")
+
+    @patch("hypothesisapi.requests.get")
+    def test_get_user(self, mock_get):
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"userid": "acct:testuser@hypothes.is"}
+        mock_get.return_value = mock_response
+
+        result = self.api.get_user("acct:testuser@hypothes.is")
+        self.assertIn("userid", result)
+
+    @patch("hypothesisapi.requests.patch")
+    def test_update_user(self, mock_patch):
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "userid": "acct:testuser@hypothes.is",
+            "display_name": "New Name",
+        }
+        mock_patch.return_value = mock_response
+
+        result = self.api.update_user(
+            "acct:testuser@hypothes.is", display_name="New Name"
+        )
+        self.assertEqual(result["display_name"], "New Name")
+
 
 class TestExceptions(unittest.TestCase):
     """Tests for custom exceptions."""
@@ -162,9 +453,41 @@ class TestExceptions(unittest.TestCase):
         error = NotFoundError("Not found")
         self.assertIsInstance(error, HypothesisAPIError)
 
-    def test_permission_error_inheritance(self):
-        error = PermissionError("Permission denied")
+    def test_forbidden_error_inheritance(self):
+        error = ForbiddenError("Permission denied")
         self.assertIsInstance(error, HypothesisAPIError)
+
+    def test_forbidden_error_does_not_shadow_builtin(self):
+        """Ensure ForbiddenError doesn't shadow Python's PermissionError."""
+        # Python's builtin PermissionError should still be accessible
+        try:
+            raise PermissionError("OS permission error")
+        except PermissionError as e:
+            self.assertEqual(str(e), "OS permission error")
+            # Verify it's the builtin, not ours
+            self.assertNotIsInstance(e, HypothesisAPIError)
+
+
+class TestDeprecatedMethods(unittest.TestCase):
+    """Tests for deprecated methods."""
+
+    def setUp(self):
+        self.api = API(username="testuser", api_key="testkey")
+
+    @patch("hypothesisapi.requests.get")
+    def test_search_id_deprecation_warning(self, mock_get):
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"id": "abc123"}
+        mock_get.return_value = mock_response
+
+        import warnings
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            result = self.api.search_id("abc123")
+            self.assertEqual(len(w), 1)
+            self.assertTrue(issubclass(w[0].category, DeprecationWarning))
+            self.assertIn("deprecated", str(w[0].message))
 
 
 if __name__ == "__main__":
