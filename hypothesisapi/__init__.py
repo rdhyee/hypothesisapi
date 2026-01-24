@@ -451,9 +451,9 @@ class API:
         search_dict.update(kwargs)
         search_dict = _remove_none(search_dict)
 
-        more_results = True
+        last_seen_id: Optional[str] = None
 
-        while more_results:
+        while True:
             url_str = f"{self.api_url}/search?{urlencode(search_dict, doseq=True)}"
             response = requests.get(
                 url_str,
@@ -464,21 +464,27 @@ class API:
             data = self._handle_response(response)
             rows = data.get("rows", [])
 
-            if rows:
-                for row in rows:
-                    yield row
+            if not rows:
+                break
 
-                # Update pagination for next page
-                if use_cursor_pagination:
-                    # For cursor-based pagination, use search_after from last result
-                    last_row = rows[-1]
-                    # search_after typically uses the annotation's created timestamp + id
-                    search_dict["search_after"] = last_row.get("created", "") + last_row.get("id", "")
-                else:
-                    # For offset-based pagination, increment offset
-                    search_dict["offset"] = search_dict.get("offset", 0) + limit
+            # Guard against infinite loops - break if seeing same first result
+            first_id = rows[0].get("id") if rows else None
+            if first_id and first_id == last_seen_id:
+                break
+            last_seen_id = first_id
+
+            for row in rows:
+                yield row
+
+            # Update pagination for next page
+            if use_cursor_pagination:
+                # For cursor-based pagination, use search_after from last result
+                # Note: This is experimental - the API may return this differently
+                last_row = rows[-1]
+                search_dict["search_after"] = last_row.get("created", "") + last_row.get("id", "")
             else:
-                more_results = False
+                # For offset-based pagination, increment offset
+                search_dict["offset"] = search_dict.get("offset", 0) + limit
 
     def search_raw(
         self,
@@ -618,12 +624,18 @@ class API:
 
         Returns:
             The updated group object.
+
+        Raises:
+            ValueError: If neither name nor description is provided.
         """
         payload: Dict[str, Any] = {}
         if name is not None:
             payload["name"] = name
         if description is not None:
             payload["description"] = description
+
+        if not payload:
+            raise ValueError("At least one of 'name' or 'description' must be provided")
 
         response = requests.patch(
             f"{self.api_url}/groups/{group_id}",

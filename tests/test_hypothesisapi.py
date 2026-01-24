@@ -330,6 +330,24 @@ class TestAPISearch(unittest.TestCase):
         # Should use the full acct string as-is
         self.assertIn("acct%3Asomeone%40other.org", call_url)
 
+    @patch("hypothesisapi.requests.get")
+    def test_search_infinite_loop_guard(self, mock_get):
+        """Test search breaks if same results are returned (infinite loop guard)."""
+        # Return the same results twice - should break on second iteration
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "rows": [{"id": "same_id"}],
+            "total": 1,
+        }
+        mock_get.return_value = mock_response
+
+        results = list(self.api.search(user="testuser"))
+        # Should only get results from first call due to infinite loop guard
+        self.assertEqual(len(results), 1)
+        # Should have made 2 calls max (first + check that triggers guard)
+        self.assertLessEqual(mock_get.call_count, 2)
+
 
 class TestAPIAnnotationOperations(unittest.TestCase):
     """Tests for annotation CRUD operations."""
@@ -458,6 +476,13 @@ class TestAPIGroups(unittest.TestCase):
 
         result = self.api.update_group("group1", name="Updated Name")
         self.assertEqual(result["name"], "Updated Name")
+
+    def test_update_group_no_fields_raises(self):
+        """Test update_group raises ValueError when no fields provided."""
+        with self.assertRaises(ValueError) as ctx:
+            self.api.update_group("group1")
+        self.assertIn("name", str(ctx.exception))
+        self.assertIn("description", str(ctx.exception))
 
     @patch("hypothesisapi.requests.get")
     def test_get_group_members(self, mock_get):
