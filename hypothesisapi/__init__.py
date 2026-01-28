@@ -996,7 +996,7 @@ class API:
         response = requests.post(
             f"{self.api_url}/groups/{encoded_group_id}/members/{encoded_userid}",
             headers=self._get_headers(),
-            json=payload if payload else None,
+            json=payload,  # Always send JSON body (empty dict if no roles)
             timeout=DEFAULT_TIMEOUT,
         )
         return self._handle_response(response)

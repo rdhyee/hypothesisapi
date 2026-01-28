@@ -45,16 +45,18 @@ Constructor: `API(username, api_key, api_url=API_URL, app_url=APP_URL)`
 - `flag(annotation_id)`: Flag annotation for review
 - `hide(annotation_id)`: Hide annotation (moderator)
 - `unhide(annotation_id)`: Unhide annotation (moderator)
-- `reindex(annotation_id)`: Reindex annotation (admin)
-- `moderation(annotation_id, hidden)`: Update moderation status
+- `reindex(annotation_id)`: Reindex annotation (admin only)
+- `moderation(annotation_id, moderation_status, annotation_updated=True)`: Update moderation status (moderator)
 - `search(...)`: Generator that paginates through search results
 - `search_raw(...)`: Single-page search returning full response
 
-**Bulk Methods:**
+**Bulk Methods (Admin/LMS only):**
 - `bulk(operations)`: Perform multiple operations in one call
 - `bulk_annotations(...)`: Bulk retrieve annotations
 - `bulk_groups(...)`: Bulk retrieve groups
 - `bulk_lms_annotations(...)`: LMS annotation retrieval
+
+*Note: Bulk endpoints return 404 for regular users. Use `search()` and `get_groups()` instead.*
 
 **Group Methods:**
 - `get_groups(authority, document_uri, expand)`: List groups
@@ -80,7 +82,7 @@ Constructor: `API(username, api_key, api_url=API_URL, app_url=APP_URL)`
 - `update_user(userid, email, display_name)`: Update user
 
 **Analytics Methods:**
-- `create_analytics_event(event_type, properties)`: Track analytics events
+- `create_analytics_event(event, properties)`: Track analytics events (restricted event types only)
 
 **Utility Methods:**
 - `root()`: Get API information
