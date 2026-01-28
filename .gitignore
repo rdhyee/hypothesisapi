@@ -58,3 +58,6 @@ notebooks/.ipynb_checkpoints/
 # Local notebook files
 notebooks/*.json
 notebooks/hypothesis.py
+
+# Outdated CI config
+.travis.yml
