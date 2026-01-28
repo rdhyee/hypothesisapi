@@ -381,6 +381,11 @@ class API:
         Raises:
             ForbiddenError: If user lacks admin permissions.
             NotFoundError: If the annotation doesn't exist.
+            HypothesisAPIError: May return 500 for non-admin users.
+
+        Note:
+            This is an internal/admin-only endpoint. Regular users will
+            receive an error when attempting to use this method.
         """
         response = requests.post(
             f"{self.api_url}/annotations/{annotation_id}/reindex",
@@ -389,27 +394,45 @@ class API:
         )
         return self._handle_response(response)
 
-    def moderation(self, annotation_id: str, hidden: bool) -> Dict[str, Any]:
+    def moderation(
+        self,
+        annotation_id: str,
+        moderation_status: str,
+        annotation_updated: bool = True,
+    ) -> Dict[str, Any]:
         """
         Update moderation status of an annotation.
 
-        This is an alternative to hide/unhide that uses PATCH semantics.
+        This endpoint allows moderators to change the moderation status of
+        an annotation (e.g., approve, flag, or hide it).
 
         Args:
             annotation_id: The annotation ID to moderate.
-            hidden: Whether the annotation should be hidden.
+            moderation_status: The new moderation status. Common values:
+                - "APPROVED": Annotation is approved and visible
+                - "HIDDEN": Annotation is hidden from public view
+                - "FLAGGED": Annotation is flagged for review
+            annotation_updated: Whether to mark the annotation as updated.
+                Defaults to True.
 
         Returns:
-            Empty dict on success.
+            The updated annotation object.
 
         Raises:
             ForbiddenError: If user is not a moderator.
             NotFoundError: If the annotation doesn't exist.
+
+        Note:
+            This is an alternative to hide()/unhide() with more granular control.
+            For simple hide/unhide operations, prefer those methods.
         """
         response = requests.patch(
             f"{self.api_url}/annotations/{annotation_id}/moderation",
             headers=self._get_headers(),
-            json={"hidden": hidden},
+            json={
+                "moderation_status": moderation_status,
+                "annotation_updated": annotation_updated,
+            },
             timeout=DEFAULT_TIMEOUT,
         )
         return self._handle_response(response)
@@ -597,6 +620,12 @@ class API:
 
         Raises:
             HypothesisAPIError: If the bulk operation fails.
+            NotFoundError: If endpoint is not available (admin/LMS only).
+
+        Note:
+            This endpoint may only be available to administrators or
+            LMS (Learning Management System) integrations. Regular users
+            will receive a 404 error.
         """
         response = requests.post(
             f"{self.api_url}/bulk",
@@ -629,6 +658,13 @@ class API:
 
         Raises:
             HypothesisAPIError: If the request fails.
+            NotFoundError: If endpoint is not available (admin/LMS only).
+
+        Note:
+            This endpoint may only be available to administrators or
+            LMS (Learning Management System) integrations. Regular users
+            should use search() instead, which provides similar functionality
+            with pagination.
         """
         payload: Dict[str, Any] = {}
         if annotation_ids:
@@ -667,6 +703,12 @@ class API:
 
         Raises:
             HypothesisAPIError: If the request fails.
+            NotFoundError: If endpoint is not available (admin/LMS only).
+
+        Note:
+            This endpoint may only be available to administrators or
+            LMS (Learning Management System) integrations. Regular users
+            should use get_groups() instead.
         """
         payload: Dict[str, Any] = {}
         if group_ids:
@@ -705,6 +747,12 @@ class API:
 
         Raises:
             HypothesisAPIError: If the request fails.
+            NotFoundError: If endpoint is not available.
+
+        Note:
+            This endpoint is only available for LMS integrations with
+            proper authentication. Regular Hypothesis users will receive
+            a 404 error.
         """
         payload: Dict[str, Any] = {"group_ids": group_ids}
         if assignment_id:
@@ -900,7 +948,16 @@ class API:
             offset: Starting offset for pagination.
 
         Returns:
-            Dictionary containing annotations and pagination info.
+            Dictionary with structure:
+            {
+                "meta": {"page": {"total": <int>}},
+                "data": [<annotation>, ...]
+            }
+            Access annotations via result["data"] and total count via
+            result["meta"]["page"]["total"].
+
+        Note:
+            This differs from search() which returns {"rows": [...], "total": N}.
         """
         params: Dict[str, Any] = {"limit": limit, "offset": offset}
         encoded_group_id = quote(group_id, safe="")
@@ -1188,7 +1245,7 @@ class API:
 
     def create_analytics_event(
         self,
-        event_type: str,
+        event: str,
         properties: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
@@ -1197,16 +1254,24 @@ class API:
         Track usage events for analytics purposes.
 
         Args:
-            event_type: The type of event to track.
+            event: The event name to track. Note: The Hypothesis API only
+                accepts specific event names (e.g., "client.realtime.apply_updates").
+                Check API documentation for the full list of accepted events.
             properties: Optional dictionary of event properties.
 
         Returns:
             Empty dict on success.
 
         Raises:
-            HypothesisAPIError: If the event creation fails.
+            HypothesisAPIError: If the event creation fails or the event
+                name is not in the allowed list.
+
+        Note:
+            This endpoint has restricted event types. It is primarily used
+            by the Hypothesis client for internal analytics, not for
+            general-purpose event tracking.
         """
-        payload: Dict[str, Any] = {"type": event_type}
+        payload: Dict[str, Any] = {"event": event}
         if properties:
             payload["properties"] = properties
 

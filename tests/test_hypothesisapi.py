@@ -666,31 +666,33 @@ class TestNewAnnotationMethods(unittest.TestCase):
             self.api.reindex("abc123")
 
     @patch("hypothesisapi.requests.patch")
-    def test_moderation_hide(self, mock_patch):
-        """Test moderation with hidden=True."""
+    def test_moderation_approve(self, mock_patch):
+        """Test moderation with APPROVED status."""
         mock_response = Mock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {}
+        mock_response.json.return_value = {"id": "abc123", "moderation_status": "APPROVED"}
         mock_patch.return_value = mock_response
 
-        result = self.api.moderation("abc123", hidden=True)
-        self.assertEqual(result, {})
+        result = self.api.moderation("abc123", moderation_status="APPROVED")
+        self.assertEqual(result["moderation_status"], "APPROVED")
         # Verify payload
         call_kwargs = mock_patch.call_args.kwargs
-        self.assertEqual(call_kwargs["json"], {"hidden": True})
+        self.assertEqual(call_kwargs["json"]["moderation_status"], "APPROVED")
+        self.assertEqual(call_kwargs["json"]["annotation_updated"], True)
 
     @patch("hypothesisapi.requests.patch")
-    def test_moderation_unhide(self, mock_patch):
-        """Test moderation with hidden=False."""
+    def test_moderation_hide(self, mock_patch):
+        """Test moderation with HIDDEN status."""
         mock_response = Mock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {}
+        mock_response.json.return_value = {"id": "abc123", "moderation_status": "HIDDEN"}
         mock_patch.return_value = mock_response
 
-        result = self.api.moderation("abc123", hidden=False)
+        result = self.api.moderation("abc123", moderation_status="HIDDEN", annotation_updated=False)
         # Verify payload
         call_kwargs = mock_patch.call_args.kwargs
-        self.assertEqual(call_kwargs["json"], {"hidden": False})
+        self.assertEqual(call_kwargs["json"]["moderation_status"], "HIDDEN")
+        self.assertEqual(call_kwargs["json"]["annotation_updated"], False)
 
 
 class TestBulkMethods(unittest.TestCase):
@@ -785,11 +787,16 @@ class TestGroupMembershipMethods(unittest.TestCase):
         """Test get_group_annotations endpoint."""
         mock_response = Mock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {"rows": [{"id": "1"}], "total": 1}
+        # Real API returns {"meta": {"page": {"total": N}}, "data": [...]}
+        mock_response.json.return_value = {
+            "meta": {"page": {"total": 1}},
+            "data": [{"id": "1"}]
+        }
         mock_get.return_value = mock_response
 
         result = self.api.get_group_annotations("testgroup")
-        self.assertIn("rows", result)
+        self.assertIn("data", result)
+        self.assertEqual(result["meta"]["page"]["total"], 1)
         call_url = mock_get.call_args[0][0]
         self.assertIn("/groups/testgroup/annotations", call_url)
 
@@ -798,7 +805,7 @@ class TestGroupMembershipMethods(unittest.TestCase):
         """Test that group_id is URL-encoded."""
         mock_response = Mock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {"rows": [], "total": 0}
+        mock_response.json.return_value = {"meta": {"page": {"total": 0}}, "data": []}
         mock_get.return_value = mock_response
 
         # Group ID with special characters (unlikely but should handle)
@@ -924,14 +931,15 @@ class TestAnalyticsAndUtilityMethods(unittest.TestCase):
         mock_post.return_value = mock_response
 
         result = self.api.create_analytics_event(
-            "page_view",
+            "client.realtime.apply_updates",
             properties={"url": "https://example.com"}
         )
         self.assertEqual(result, {})
         call_url = mock_post.call_args[0][0]
         self.assertIn("/analytics/events", call_url)
         call_kwargs = mock_post.call_args.kwargs
-        self.assertEqual(call_kwargs["json"]["type"], "page_view")
+        # Field is "event" not "type"
+        self.assertEqual(call_kwargs["json"]["event"], "client.realtime.apply_updates")
         self.assertEqual(call_kwargs["json"]["properties"]["url"], "https://example.com")
 
     @patch("hypothesisapi.requests.post")
@@ -942,9 +950,9 @@ class TestAnalyticsAndUtilityMethods(unittest.TestCase):
         mock_response.json.return_value = {}
         mock_post.return_value = mock_response
 
-        result = self.api.create_analytics_event("button_click")
+        result = self.api.create_analytics_event("client.realtime.apply_updates")
         call_kwargs = mock_post.call_args.kwargs
-        self.assertEqual(call_kwargs["json"], {"type": "button_click"})
+        self.assertEqual(call_kwargs["json"], {"event": "client.realtime.apply_updates"})
 
     @patch("hypothesisapi.requests.get")
     def test_get_links(self, mock_get):
