@@ -15,19 +15,33 @@ __version__ = "0.4.0"
 
 import warnings
 from typing import Any, Dict, Generator, List, Optional
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 import requests
 
 __all__ = [
+    # Main class and constants
     "API",
     "API_URL",
     "APP_URL",
+    # Exceptions
     "HypothesisAPIError",
     "AuthenticationError",
     "NotFoundError",
     "ForbiddenError",
 ]
+
+# Note: The following API methods are available on the API class:
+# Annotations: create, get_annotation, update, delete, flag, hide, unhide, reindex, moderation
+# Search: search, search_raw
+# Bulk: bulk, bulk_annotations, bulk_groups, bulk_lms_annotations
+# Groups: get_groups, create_group, get_group, update_group, get_group_annotations,
+#         get_group_members, add_group_member, get_group_member, update_group_member,
+#         remove_group_member, leave_group
+# Profile: get_profile, get_profile_groups, update_profile
+# Users (Admin): create_user, get_user, update_user
+# Analytics: create_analytics_event
+# Utility: root, get_links
 
 APP_URL = "https://hypothes.is/app"
 API_URL = "https://hypothes.is/api"
@@ -118,7 +132,7 @@ class API:
             headers["Authorization"] = f"Bearer {self.api_key}"
         return headers
 
-    def _handle_response(self, response: requests.Response) -> Dict[str, Any]:
+    def _handle_response(self, response: requests.Response) -> Any:
         """Handle API response and raise appropriate exceptions."""
         if response.status_code in (200, 201):
             return response.json()
@@ -352,6 +366,77 @@ class API:
         )
         return self._handle_response(response)
 
+    def reindex(self, annotation_id: str) -> Dict[str, Any]:
+        """
+        Reindex an annotation (admin action).
+
+        Triggers reindexing of the annotation in the search index.
+
+        Args:
+            annotation_id: The annotation ID to reindex.
+
+        Returns:
+            Empty dict on success.
+
+        Raises:
+            ForbiddenError: If user lacks admin permissions.
+            NotFoundError: If the annotation doesn't exist.
+            HypothesisAPIError: May return 500 for non-admin users.
+
+        Note:
+            This is an internal/admin-only endpoint. Regular users will
+            receive an error when attempting to use this method.
+        """
+        response = requests.post(
+            f"{self.api_url}/annotations/{annotation_id}/reindex",
+            headers=self._get_headers(),
+            timeout=DEFAULT_TIMEOUT,
+        )
+        return self._handle_response(response)
+
+    def moderation(
+        self,
+        annotation_id: str,
+        moderation_status: str,
+        annotation_updated: bool = True,
+    ) -> Dict[str, Any]:
+        """
+        Update moderation status of an annotation.
+
+        This endpoint allows moderators to change the moderation status of
+        an annotation (e.g., approve, flag, or hide it).
+
+        Args:
+            annotation_id: The annotation ID to moderate.
+            moderation_status: The new moderation status. Common values:
+                - "APPROVED": Annotation is approved and visible
+                - "HIDDEN": Annotation is hidden from public view
+                - "FLAGGED": Annotation is flagged for review
+            annotation_updated: Whether to mark the annotation as updated.
+                Defaults to True.
+
+        Returns:
+            The updated annotation object.
+
+        Raises:
+            ForbiddenError: If user is not a moderator.
+            NotFoundError: If the annotation doesn't exist.
+
+        Note:
+            This is an alternative to hide()/unhide() with more granular control.
+            For simple hide/unhide operations, prefer those methods.
+        """
+        response = requests.patch(
+            f"{self.api_url}/annotations/{annotation_id}/moderation",
+            headers=self._get_headers(),
+            json={
+                "moderation_status": moderation_status,
+                "annotation_updated": annotation_updated,
+            },
+            timeout=DEFAULT_TIMEOUT,
+        )
+        return self._handle_response(response)
+
     def search(
         self,
         user: Optional[str] = None,
@@ -513,6 +598,172 @@ class API:
         response = requests.get(
             url,
             headers=self._get_headers(),
+            timeout=DEFAULT_TIMEOUT,
+        )
+        return self._handle_response(response)
+
+    # ========== Bulk Endpoints ==========
+
+    def bulk(self, operations: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Perform multiple operations in a single API call.
+
+        This endpoint allows batching multiple operations for efficiency.
+
+        Args:
+            operations: List of operation objects. Each operation should have:
+                - action: The action type (e.g., "create", "update", "delete")
+                - Additional fields depending on the action type
+
+        Returns:
+            Results of the bulk operation.
+
+        Raises:
+            HypothesisAPIError: If the bulk operation fails.
+            NotFoundError: If endpoint is not available (admin/LMS only).
+
+        Note:
+            This endpoint may only be available to administrators or
+            LMS (Learning Management System) integrations. Regular users
+            will receive a 404 error.
+        """
+        response = requests.post(
+            f"{self.api_url}/bulk",
+            headers=self._get_headers(),
+            json=operations,
+            timeout=DEFAULT_TIMEOUT,
+        )
+        return self._handle_response(response)
+
+    def bulk_annotations(
+        self,
+        annotation_ids: Optional[List[str]] = None,
+        group: Optional[str] = None,
+        user: Optional[str] = None,
+        uri: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Retrieve a large number of annotations in one call.
+
+        More efficient than paginated search for bulk retrieval.
+
+        Args:
+            annotation_ids: List of specific annotation IDs to retrieve.
+            group: Filter by group ID.
+            user: Filter by user (acct: format).
+            uri: Filter by document URI.
+
+        Returns:
+            Dictionary containing the annotations.
+
+        Raises:
+            HypothesisAPIError: If the request fails.
+            NotFoundError: If endpoint is not available (admin/LMS only).
+
+        Note:
+            This endpoint may only be available to administrators or
+            LMS (Learning Management System) integrations. Regular users
+            should use search() instead, which provides similar functionality
+            with pagination.
+        """
+        payload: Dict[str, Any] = {}
+        if annotation_ids:
+            payload["ids"] = annotation_ids
+        if group:
+            payload["group"] = group
+        if user:
+            payload["user"] = user
+        if uri:
+            payload["uri"] = uri
+
+        response = requests.post(
+            f"{self.api_url}/bulk/annotation",
+            headers=self._get_headers(),
+            json=payload,
+            timeout=DEFAULT_TIMEOUT,
+        )
+        return self._handle_response(response)
+
+    def bulk_groups(
+        self,
+        group_ids: Optional[List[str]] = None,
+        authority: Optional[str] = None,
+        expand: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Retrieve a large number of groups in one call.
+
+        Args:
+            group_ids: List of specific group IDs to retrieve.
+            authority: Filter by authority domain.
+            expand: Fields to expand (e.g., ["organization", "scopes"]).
+
+        Returns:
+            Dictionary containing the groups.
+
+        Raises:
+            HypothesisAPIError: If the request fails.
+            NotFoundError: If endpoint is not available (admin/LMS only).
+
+        Note:
+            This endpoint may only be available to administrators or
+            LMS (Learning Management System) integrations. Regular users
+            should use get_groups() instead.
+        """
+        payload: Dict[str, Any] = {}
+        if group_ids:
+            payload["ids"] = group_ids
+        if authority:
+            payload["authority"] = authority
+        if expand:
+            payload["expand"] = expand
+
+        response = requests.post(
+            f"{self.api_url}/bulk/group",
+            headers=self._get_headers(),
+            json=payload,
+            timeout=DEFAULT_TIMEOUT,
+        )
+        return self._handle_response(response)
+
+    def bulk_lms_annotations(
+        self,
+        group_ids: List[str],
+        assignment_id: Optional[str] = None,
+        course_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Retrieve annotations for LMS (Learning Management System) metrics.
+
+        This endpoint is designed for educational integrations.
+
+        Args:
+            group_ids: List of group IDs to retrieve annotations from.
+            assignment_id: Optional LMS assignment identifier.
+            course_id: Optional LMS course identifier.
+
+        Returns:
+            Dictionary containing LMS-related annotation data.
+
+        Raises:
+            HypothesisAPIError: If the request fails.
+            NotFoundError: If endpoint is not available.
+
+        Note:
+            This endpoint is only available for LMS integrations with
+            proper authentication. Regular Hypothesis users will receive
+            a 404 error.
+        """
+        payload: Dict[str, Any] = {"group_ids": group_ids}
+        if assignment_id:
+            payload["assignment_id"] = assignment_id
+        if course_id:
+            payload["course_id"] = course_id
+
+        response = requests.post(
+            f"{self.api_url}/bulk/lms/annotations",
+            headers=self._get_headers(),
+            json=payload,
             timeout=DEFAULT_TIMEOUT,
         )
         return self._handle_response(response)
@@ -679,6 +930,155 @@ class API:
         )
         return self._handle_response(response)
 
+    def get_group_annotations(
+        self,
+        group_id: str,
+        limit: int = 200,
+        offset: int = 0,
+    ) -> Dict[str, Any]:
+        """
+        Get all annotations in a group.
+
+        This is a direct endpoint for retrieving group annotations,
+        alternative to using search() with a group filter.
+
+        Args:
+            group_id: The group ID (pubid).
+            limit: Maximum results to return (max 200).
+            offset: Starting offset for pagination.
+
+        Returns:
+            Dictionary with structure:
+            {
+                "meta": {"page": {"total": <int>}},
+                "data": [<annotation>, ...]
+            }
+            Access annotations via result["data"] and total count via
+            result["meta"]["page"]["total"].
+
+        Note:
+            This differs from search() which returns {"rows": [...], "total": N}.
+        """
+        params: Dict[str, Any] = {"limit": limit, "offset": offset}
+        encoded_group_id = quote(group_id, safe="")
+        url = f"{self.api_url}/groups/{encoded_group_id}/annotations?{urlencode(params)}"
+
+        response = requests.get(url, headers=self._get_headers(), timeout=DEFAULT_TIMEOUT)
+        return self._handle_response(response)
+
+    def add_group_member(
+        self,
+        group_id: str,
+        userid: str,
+        roles: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Add a user to a group.
+
+        Args:
+            group_id: The group ID (pubid).
+            userid: The user ID to add (e.g., "acct:username@authority").
+            roles: Optional list of roles to assign (e.g., ["member", "moderator"]).
+
+        Returns:
+            The membership object.
+
+        Raises:
+            ForbiddenError: If user lacks permission to add members.
+            NotFoundError: If the group or user doesn't exist.
+        """
+        payload: Dict[str, Any] = {}
+        if roles:
+            payload["roles"] = roles
+
+        encoded_group_id = quote(group_id, safe="")
+        encoded_userid = quote(userid, safe="")
+        response = requests.post(
+            f"{self.api_url}/groups/{encoded_group_id}/members/{encoded_userid}",
+            headers=self._get_headers(),
+            json=payload,  # Always send JSON body (empty dict if no roles)
+            timeout=DEFAULT_TIMEOUT,
+        )
+        return self._handle_response(response)
+
+    def get_group_member(self, group_id: str, userid: str) -> Dict[str, Any]:
+        """
+        Get a specific member's information in a group.
+
+        Args:
+            group_id: The group ID (pubid).
+            userid: The user ID (e.g., "acct:username@authority").
+
+        Returns:
+            The membership object with user info and roles.
+
+        Raises:
+            NotFoundError: If the membership doesn't exist.
+        """
+        encoded_group_id = quote(group_id, safe="")
+        encoded_userid = quote(userid, safe="")
+        response = requests.get(
+            f"{self.api_url}/groups/{encoded_group_id}/members/{encoded_userid}",
+            headers=self._get_headers(),
+            timeout=DEFAULT_TIMEOUT,
+        )
+        return self._handle_response(response)
+
+    def update_group_member(
+        self,
+        group_id: str,
+        userid: str,
+        roles: List[str],
+    ) -> Dict[str, Any]:
+        """
+        Update a member's role in a group.
+
+        Args:
+            group_id: The group ID (pubid).
+            userid: The user ID (e.g., "acct:username@authority").
+            roles: List of roles to assign (e.g., ["member"], ["moderator"]).
+
+        Returns:
+            The updated membership object.
+
+        Raises:
+            ForbiddenError: If user lacks permission to update roles.
+            NotFoundError: If the membership doesn't exist.
+        """
+        encoded_group_id = quote(group_id, safe="")
+        encoded_userid = quote(userid, safe="")
+        response = requests.patch(
+            f"{self.api_url}/groups/{encoded_group_id}/members/{encoded_userid}",
+            headers=self._get_headers(),
+            json={"roles": roles},
+            timeout=DEFAULT_TIMEOUT,
+        )
+        return self._handle_response(response)
+
+    def remove_group_member(self, group_id: str, userid: str) -> Dict[str, Any]:
+        """
+        Remove a user from a group.
+
+        Args:
+            group_id: The group ID (pubid).
+            userid: The user ID to remove (e.g., "acct:username@authority").
+
+        Returns:
+            Empty dict on success.
+
+        Raises:
+            ForbiddenError: If user lacks permission to remove members.
+            NotFoundError: If the membership doesn't exist.
+        """
+        encoded_group_id = quote(group_id, safe="")
+        encoded_userid = quote(userid, safe="")
+        response = requests.delete(
+            f"{self.api_url}/groups/{encoded_group_id}/members/{encoded_userid}",
+            headers=self._get_headers(),
+            timeout=DEFAULT_TIMEOUT,
+        )
+        return self._handle_response(response)
+
     # ========== Profile Endpoints ==========
 
     def get_profile(self) -> Dict[str, Any]:
@@ -725,6 +1125,28 @@ class API:
             url += f"?{urlencode(params, doseq=True)}"
 
         response = requests.get(url, headers=self._get_headers(), timeout=DEFAULT_TIMEOUT)
+        return self._handle_response(response)
+
+    def update_profile(self, preferences: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Update the current user's profile preferences.
+
+        Args:
+            preferences: Dictionary of preference settings to update.
+                Common preferences include notification settings.
+
+        Returns:
+            The updated profile object.
+
+        Raises:
+            HypothesisAPIError: If the update fails.
+        """
+        response = requests.patch(
+            f"{self.api_url}/profile",
+            headers=self._get_headers(),
+            json={"preferences": preferences},
+            timeout=DEFAULT_TIMEOUT,
+        )
         return self._handle_response(response)
 
     # ========== User Endpoints (Admin) ==========
@@ -815,6 +1237,67 @@ class API:
             f"{self.api_url}/users/{userid}",
             headers=self._get_headers(),
             json=payload,
+            timeout=DEFAULT_TIMEOUT,
+        )
+        return self._handle_response(response)
+
+    # ========== Analytics Endpoints ==========
+
+    def create_analytics_event(
+        self,
+        event: str,
+        properties: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Create an analytics event.
+
+        Track usage events for analytics purposes.
+
+        Args:
+            event: The event name to track. Note: The Hypothesis API only
+                accepts specific event names (e.g., "client.realtime.apply_updates").
+                Check API documentation for the full list of accepted events.
+            properties: Optional dictionary of event properties.
+
+        Returns:
+            Empty dict on success.
+
+        Raises:
+            HypothesisAPIError: If the event creation fails or the event
+                name is not in the allowed list.
+
+        Note:
+            This endpoint has restricted event types. It is primarily used
+            by the Hypothesis client for internal analytics, not for
+            general-purpose event tracking.
+        """
+        payload: Dict[str, Any] = {"event": event}
+        if properties:
+            payload["properties"] = properties
+
+        response = requests.post(
+            f"{self.api_url}/analytics/events",
+            headers=self._get_headers(),
+            json=payload,
+            timeout=DEFAULT_TIMEOUT,
+        )
+        return self._handle_response(response)
+
+    # ========== Links Endpoints ==========
+
+    def get_links(self) -> Dict[str, Any]:
+        """
+        Get URL templates for generating URLs to HTML pages.
+
+        Returns URL templates that can be used to construct links
+        to various pages in the Hypothesis web application.
+
+        Returns:
+            Dictionary of URL templates with placeholders.
+        """
+        response = requests.get(
+            f"{self.api_url}/links",
+            headers=self._get_headers(authenticated=False),
             timeout=DEFAULT_TIMEOUT,
         )
         return self._handle_response(response)

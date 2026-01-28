@@ -634,5 +634,355 @@ class TestDeprecatedMethods(unittest.TestCase):
             self.assertIn("deprecated", str(w[0].message))
 
 
+class TestNewAnnotationMethods(unittest.TestCase):
+    """Tests for new annotation methods (reindex, moderation)."""
+
+    def setUp(self):
+        self.api = API(username="testuser", api_key="testkey")
+
+    @patch("hypothesisapi.requests.post")
+    def test_reindex(self, mock_post):
+        """Test reindex calls correct endpoint."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {}
+        mock_post.return_value = mock_response
+
+        result = self.api.reindex("abc123")
+        self.assertEqual(result, {})
+        # Verify correct URL
+        call_url = mock_post.call_args[0][0]
+        self.assertIn("/annotations/abc123/reindex", call_url)
+
+    @patch("hypothesisapi.requests.post")
+    def test_reindex_forbidden(self, mock_post):
+        """Test reindex raises ForbiddenError for non-admins."""
+        mock_response = Mock()
+        mock_response.status_code = 403
+        mock_response.text = "Forbidden"
+        mock_post.return_value = mock_response
+
+        with self.assertRaises(ForbiddenError):
+            self.api.reindex("abc123")
+
+    @patch("hypothesisapi.requests.patch")
+    def test_moderation_approve(self, mock_patch):
+        """Test moderation with APPROVED status."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"id": "abc123", "moderation_status": "APPROVED"}
+        mock_patch.return_value = mock_response
+
+        result = self.api.moderation("abc123", moderation_status="APPROVED")
+        self.assertEqual(result["moderation_status"], "APPROVED")
+        # Verify payload
+        call_kwargs = mock_patch.call_args.kwargs
+        self.assertEqual(call_kwargs["json"]["moderation_status"], "APPROVED")
+        self.assertEqual(call_kwargs["json"]["annotation_updated"], True)
+
+    @patch("hypothesisapi.requests.patch")
+    def test_moderation_hide(self, mock_patch):
+        """Test moderation with HIDDEN status."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"id": "abc123", "moderation_status": "HIDDEN"}
+        mock_patch.return_value = mock_response
+
+        result = self.api.moderation("abc123", moderation_status="HIDDEN", annotation_updated=False)
+        # Verify payload
+        call_kwargs = mock_patch.call_args.kwargs
+        self.assertEqual(call_kwargs["json"]["moderation_status"], "HIDDEN")
+        self.assertEqual(call_kwargs["json"]["annotation_updated"], False)
+
+
+class TestBulkMethods(unittest.TestCase):
+    """Tests for bulk operation methods."""
+
+    def setUp(self):
+        self.api = API(username="testuser", api_key="testkey")
+
+    @patch("hypothesisapi.requests.post")
+    def test_bulk(self, mock_post):
+        """Test bulk operations endpoint."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"results": []}
+        mock_post.return_value = mock_response
+
+        operations = [{"action": "create", "data": {"uri": "https://example.com"}}]
+        result = self.api.bulk(operations)
+        self.assertIn("results", result)
+        # Verify payload is the operations list
+        call_kwargs = mock_post.call_args.kwargs
+        self.assertEqual(call_kwargs["json"], operations)
+
+    @patch("hypothesisapi.requests.post")
+    def test_bulk_annotations(self, mock_post):
+        """Test bulk annotation retrieval."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"annotations": [{"id": "1"}, {"id": "2"}]}
+        mock_post.return_value = mock_response
+
+        result = self.api.bulk_annotations(group="testgroup")
+        self.assertIn("annotations", result)
+        # Verify correct endpoint
+        call_url = mock_post.call_args[0][0]
+        self.assertIn("/bulk/annotation", call_url)
+
+    @patch("hypothesisapi.requests.post")
+    def test_bulk_annotations_with_ids(self, mock_post):
+        """Test bulk annotation retrieval with specific IDs."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"annotations": []}
+        mock_post.return_value = mock_response
+
+        result = self.api.bulk_annotations(annotation_ids=["id1", "id2"])
+        call_kwargs = mock_post.call_args.kwargs
+        self.assertEqual(call_kwargs["json"]["ids"], ["id1", "id2"])
+
+    @patch("hypothesisapi.requests.post")
+    def test_bulk_groups(self, mock_post):
+        """Test bulk group retrieval."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"groups": []}
+        mock_post.return_value = mock_response
+
+        result = self.api.bulk_groups(group_ids=["g1", "g2"])
+        call_url = mock_post.call_args[0][0]
+        self.assertIn("/bulk/group", call_url)
+        call_kwargs = mock_post.call_args.kwargs
+        self.assertEqual(call_kwargs["json"]["ids"], ["g1", "g2"])
+
+    @patch("hypothesisapi.requests.post")
+    def test_bulk_lms_annotations(self, mock_post):
+        """Test LMS bulk annotation retrieval."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"annotations": []}
+        mock_post.return_value = mock_response
+
+        result = self.api.bulk_lms_annotations(
+            group_ids=["g1"],
+            assignment_id="assign1",
+            course_id="course1"
+        )
+        call_url = mock_post.call_args[0][0]
+        self.assertIn("/bulk/lms/annotations", call_url)
+        call_kwargs = mock_post.call_args.kwargs
+        self.assertEqual(call_kwargs["json"]["group_ids"], ["g1"])
+        self.assertEqual(call_kwargs["json"]["assignment_id"], "assign1")
+
+
+class TestGroupMembershipMethods(unittest.TestCase):
+    """Tests for group membership management methods."""
+
+    def setUp(self):
+        self.api = API(username="testuser", api_key="testkey")
+
+    @patch("hypothesisapi.requests.get")
+    def test_get_group_annotations(self, mock_get):
+        """Test get_group_annotations endpoint."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        # Real API returns {"meta": {"page": {"total": N}}, "data": [...]}
+        mock_response.json.return_value = {
+            "meta": {"page": {"total": 1}},
+            "data": [{"id": "1"}]
+        }
+        mock_get.return_value = mock_response
+
+        result = self.api.get_group_annotations("testgroup")
+        self.assertIn("data", result)
+        self.assertEqual(result["meta"]["page"]["total"], 1)
+        call_url = mock_get.call_args[0][0]
+        self.assertIn("/groups/testgroup/annotations", call_url)
+
+    @patch("hypothesisapi.requests.get")
+    def test_get_group_annotations_url_encoding(self, mock_get):
+        """Test that group_id is URL-encoded."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"meta": {"page": {"total": 0}}, "data": []}
+        mock_get.return_value = mock_response
+
+        # Group ID with special characters (unlikely but should handle)
+        self.api.get_group_annotations("group/with/slashes")
+        call_url = mock_get.call_args[0][0]
+        # Slashes should be encoded as %2F
+        self.assertIn("group%2Fwith%2Fslashes", call_url)
+
+    @patch("hypothesisapi.requests.post")
+    def test_add_group_member(self, mock_post):
+        """Test adding a member to a group."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"userid": "acct:user@hypothes.is"}
+        mock_post.return_value = mock_response
+
+        result = self.api.add_group_member("testgroup", "acct:user@hypothes.is")
+        self.assertIn("userid", result)
+
+    @patch("hypothesisapi.requests.post")
+    def test_add_group_member_with_roles(self, mock_post):
+        """Test adding a member with specific roles."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"userid": "acct:user@hypothes.is", "roles": ["moderator"]}
+        mock_post.return_value = mock_response
+
+        result = self.api.add_group_member(
+            "testgroup",
+            "acct:user@hypothes.is",
+            roles=["moderator"]
+        )
+        call_kwargs = mock_post.call_args.kwargs
+        self.assertEqual(call_kwargs["json"]["roles"], ["moderator"])
+
+    @patch("hypothesisapi.requests.post")
+    def test_add_group_member_url_encoding(self, mock_post):
+        """Test that userid is URL-encoded (contains : and @)."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {}
+        mock_post.return_value = mock_response
+
+        self.api.add_group_member("testgroup", "acct:user@hypothes.is")
+        call_url = mock_post.call_args[0][0]
+        # The : and @ should be encoded
+        self.assertIn("acct%3Auser%40hypothes.is", call_url)
+
+    @patch("hypothesisapi.requests.get")
+    def test_get_group_member(self, mock_get):
+        """Test getting a specific member's info."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"userid": "acct:user@hypothes.is", "roles": ["member"]}
+        mock_get.return_value = mock_response
+
+        result = self.api.get_group_member("testgroup", "acct:user@hypothes.is")
+        self.assertEqual(result["roles"], ["member"])
+
+    @patch("hypothesisapi.requests.patch")
+    def test_update_group_member(self, mock_patch):
+        """Test updating a member's roles."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"userid": "acct:user@hypothes.is", "roles": ["moderator"]}
+        mock_patch.return_value = mock_response
+
+        result = self.api.update_group_member(
+            "testgroup",
+            "acct:user@hypothes.is",
+            roles=["moderator"]
+        )
+        self.assertEqual(result["roles"], ["moderator"])
+        call_kwargs = mock_patch.call_args.kwargs
+        self.assertEqual(call_kwargs["json"]["roles"], ["moderator"])
+
+    @patch("hypothesisapi.requests.delete")
+    def test_remove_group_member(self, mock_delete):
+        """Test removing a member from a group."""
+        mock_response = Mock()
+        mock_response.status_code = 204
+        mock_delete.return_value = mock_response
+
+        result = self.api.remove_group_member("testgroup", "acct:user@hypothes.is")
+        self.assertEqual(result, {})
+
+
+class TestProfileUpdateMethod(unittest.TestCase):
+    """Tests for update_profile method."""
+
+    def setUp(self):
+        self.api = API(username="testuser", api_key="testkey")
+
+    @patch("hypothesisapi.requests.patch")
+    def test_update_profile(self, mock_patch):
+        """Test updating profile preferences."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"userid": "acct:testuser@hypothes.is"}
+        mock_patch.return_value = mock_response
+
+        result = self.api.update_profile({"notifications": {"reply": True}})
+        self.assertIn("userid", result)
+        call_kwargs = mock_patch.call_args.kwargs
+        self.assertEqual(
+            call_kwargs["json"],
+            {"preferences": {"notifications": {"reply": True}}}
+        )
+
+
+class TestAnalyticsAndUtilityMethods(unittest.TestCase):
+    """Tests for analytics and utility methods."""
+
+    def setUp(self):
+        self.api = API(username="testuser", api_key="testkey")
+
+    @patch("hypothesisapi.requests.post")
+    def test_create_analytics_event(self, mock_post):
+        """Test creating an analytics event."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {}
+        mock_post.return_value = mock_response
+
+        result = self.api.create_analytics_event(
+            "client.realtime.apply_updates",
+            properties={"url": "https://example.com"}
+        )
+        self.assertEqual(result, {})
+        call_url = mock_post.call_args[0][0]
+        self.assertIn("/analytics/events", call_url)
+        call_kwargs = mock_post.call_args.kwargs
+        # Field is "event" not "type"
+        self.assertEqual(call_kwargs["json"]["event"], "client.realtime.apply_updates")
+        self.assertEqual(call_kwargs["json"]["properties"]["url"], "https://example.com")
+
+    @patch("hypothesisapi.requests.post")
+    def test_create_analytics_event_minimal(self, mock_post):
+        """Test creating an analytics event without properties."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {}
+        mock_post.return_value = mock_response
+
+        result = self.api.create_analytics_event("client.realtime.apply_updates")
+        call_kwargs = mock_post.call_args.kwargs
+        self.assertEqual(call_kwargs["json"], {"event": "client.realtime.apply_updates"})
+
+    @patch("hypothesisapi.requests.get")
+    def test_get_links(self, mock_get):
+        """Test getting URL templates."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "account.settings": "https://hypothes.is/account/settings",
+            "search.tag": "https://hypothes.is/search?q=tag:{tag}"
+        }
+        mock_get.return_value = mock_response
+
+        result = self.api.get_links()
+        self.assertIn("account.settings", result)
+        call_url = mock_get.call_args[0][0]
+        self.assertIn("/links", call_url)
+
+    @patch("hypothesisapi.requests.get")
+    def test_get_links_unauthenticated(self, mock_get):
+        """Test that get_links doesn't require authentication."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {}
+        mock_get.return_value = mock_response
+
+        self.api.get_links()
+        call_kwargs = mock_get.call_args.kwargs
+        # Should not have Authorization header
+        self.assertNotIn("Authorization", call_kwargs["headers"])
+
+
 if __name__ == "__main__":
     unittest.main()

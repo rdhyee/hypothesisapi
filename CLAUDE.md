@@ -45,25 +45,48 @@ Constructor: `API(username, api_key, api_url=API_URL, app_url=APP_URL)`
 - `flag(annotation_id)`: Flag annotation for review
 - `hide(annotation_id)`: Hide annotation (moderator)
 - `unhide(annotation_id)`: Unhide annotation (moderator)
+- `reindex(annotation_id)`: Reindex annotation (admin only)
+- `moderation(annotation_id, moderation_status, annotation_updated=True)`: Update moderation status (moderator)
 - `search(...)`: Generator that paginates through search results
 - `search_raw(...)`: Single-page search returning full response
+
+**Bulk Methods (Admin/LMS only):**
+- `bulk(operations)`: Perform multiple operations in one call
+- `bulk_annotations(...)`: Bulk retrieve annotations
+- `bulk_groups(...)`: Bulk retrieve groups
+- `bulk_lms_annotations(...)`: LMS annotation retrieval
+
+*Note: Bulk endpoints return 404 for regular users. Use `search()` and `get_groups()` instead.*
 
 **Group Methods:**
 - `get_groups(authority, document_uri, expand)`: List groups
 - `create_group(name, description, groupid)`: Create private group
 - `get_group(group_id, expand)`: Get group details
 - `update_group(group_id, name, description)`: Update group
+- `get_group_annotations(group_id)`: Get all annotations in a group
 - `get_group_members(group_id)`: List group members
+- `add_group_member(group_id, userid)`: Add user to group
+- `get_group_member(group_id, userid)`: Get member details
+- `update_group_member(group_id, userid, roles)`: Change member role
+- `remove_group_member(group_id, userid)`: Remove user from group
 - `leave_group(group_id)`: Leave a group
 
 **Profile Methods:**
 - `get_profile()`: Get current user's profile
 - `get_profile_groups(...)`: Get user's groups
+- `update_profile(preferences)`: Update user preferences
 
 **User Methods (Admin):**
 - `create_user(authority, username, email, ...)`: Create user
 - `get_user(userid)`: Get user by ID
 - `update_user(userid, email, display_name)`: Update user
+
+**Analytics Methods:**
+- `create_analytics_event(event, properties)`: Track analytics events (restricted event types only)
+
+**Utility Methods:**
+- `root()`: Get API information
+- `get_links()`: Get URL templates for HTML pages
 
 ### Custom Exceptions
 
@@ -83,11 +106,16 @@ This library uses **Hypothesis API v1.0** (the current stable version). API v2.0
 ## Key API Endpoints
 
 - Base API URL: `https://hypothes.is/api`
-- Annotations: `/annotations`, `/annotations/:id`, `/annotations/:id/flag`, `/annotations/:id/hide`
-- Groups: `/groups`, `/groups/:id`, `/groups/:id/members`
+- Annotations: `/annotations`, `/annotations/:id`, `/annotations/:id/flag`, `/annotations/:id/hide`, `/annotations/:id/reindex`, `/annotations/:id/moderation`
+- Bulk: `/bulk`, `/bulk/annotation`, `/bulk/group`, `/bulk/lms/annotations`
+- Groups: `/groups`, `/groups/:id`, `/groups/:id/annotations`, `/groups/:id/members`, `/groups/:id/members/:userid`
 - Profile: `/profile`, `/profile/groups`
 - Users: `/users`, `/users/:userid`
 - Search: `/search?{params}`
+- Analytics: `/analytics/events`
+- Links: `/links`
+
+**Note:** This library provides 100% coverage of the Hypothesis API v1.0.
 
 ## Example Usage
 
