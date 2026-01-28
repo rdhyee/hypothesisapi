@@ -44,3 +44,17 @@ output/*/index.html
 
 # Sphinx
 docs/_build
+
+# Claude Code
+.claude/
+
+# Jupyter
+.ipynb_checkpoints/
+notebooks/.ipynb_checkpoints/
+
+# Local settings
+*_settings.py
+
+# Local notebook files
+notebooks/*.json
+notebooks/hypothesis.py
