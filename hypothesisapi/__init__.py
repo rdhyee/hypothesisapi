@@ -15,19 +15,33 @@ __version__ = "0.4.0"
 
 import warnings
 from typing import Any, Dict, Generator, List, Optional
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 import requests
 
 __all__ = [
+    # Main class and constants
     "API",
     "API_URL",
     "APP_URL",
+    # Exceptions
     "HypothesisAPIError",
     "AuthenticationError",
     "NotFoundError",
     "ForbiddenError",
 ]
+
+# Note: The following API methods are available on the API class:
+# Annotations: create, get_annotation, update, delete, flag, hide, unhide, reindex, moderation
+# Search: search, search_raw
+# Bulk: bulk, bulk_annotations, bulk_groups, bulk_lms_annotations
+# Groups: get_groups, create_group, get_group, update_group, get_group_annotations,
+#         get_group_members, add_group_member, get_group_member, update_group_member,
+#         remove_group_member, leave_group
+# Profile: get_profile, get_profile_groups, update_profile
+# Users (Admin): create_user, get_user, update_user
+# Analytics: create_analytics_event
+# Utility: root, get_links
 
 APP_URL = "https://hypothes.is/app"
 API_URL = "https://hypothes.is/api"
@@ -889,7 +903,8 @@ class API:
             Dictionary containing annotations and pagination info.
         """
         params: Dict[str, Any] = {"limit": limit, "offset": offset}
-        url = f"{self.api_url}/groups/{group_id}/annotations?{urlencode(params)}"
+        encoded_group_id = quote(group_id, safe="")
+        url = f"{self.api_url}/groups/{encoded_group_id}/annotations?{urlencode(params)}"
 
         response = requests.get(url, headers=self._get_headers(), timeout=DEFAULT_TIMEOUT)
         return self._handle_response(response)
@@ -919,8 +934,10 @@ class API:
         if roles:
             payload["roles"] = roles
 
+        encoded_group_id = quote(group_id, safe="")
+        encoded_userid = quote(userid, safe="")
         response = requests.post(
-            f"{self.api_url}/groups/{group_id}/members/{userid}",
+            f"{self.api_url}/groups/{encoded_group_id}/members/{encoded_userid}",
             headers=self._get_headers(),
             json=payload if payload else None,
             timeout=DEFAULT_TIMEOUT,
@@ -941,8 +958,10 @@ class API:
         Raises:
             NotFoundError: If the membership doesn't exist.
         """
+        encoded_group_id = quote(group_id, safe="")
+        encoded_userid = quote(userid, safe="")
         response = requests.get(
-            f"{self.api_url}/groups/{group_id}/members/{userid}",
+            f"{self.api_url}/groups/{encoded_group_id}/members/{encoded_userid}",
             headers=self._get_headers(),
             timeout=DEFAULT_TIMEOUT,
         )
@@ -969,8 +988,10 @@ class API:
             ForbiddenError: If user lacks permission to update roles.
             NotFoundError: If the membership doesn't exist.
         """
+        encoded_group_id = quote(group_id, safe="")
+        encoded_userid = quote(userid, safe="")
         response = requests.patch(
-            f"{self.api_url}/groups/{group_id}/members/{userid}",
+            f"{self.api_url}/groups/{encoded_group_id}/members/{encoded_userid}",
             headers=self._get_headers(),
             json={"roles": roles},
             timeout=DEFAULT_TIMEOUT,
@@ -992,8 +1013,10 @@ class API:
             ForbiddenError: If user lacks permission to remove members.
             NotFoundError: If the membership doesn't exist.
         """
+        encoded_group_id = quote(group_id, safe="")
+        encoded_userid = quote(userid, safe="")
         response = requests.delete(
-            f"{self.api_url}/groups/{group_id}/members/{userid}",
+            f"{self.api_url}/groups/{encoded_group_id}/members/{encoded_userid}",
             headers=self._get_headers(),
             timeout=DEFAULT_TIMEOUT,
         )

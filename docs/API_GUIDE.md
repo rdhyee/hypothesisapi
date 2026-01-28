@@ -872,16 +872,48 @@ api.moderation("annotation_id", hidden=True)
 ```
 
 #### Bulk Operations
+
+Bulk methods are more efficient than paginated search for large-scale retrieval.
+
 ```python
-# Retrieve many annotations efficiently
-result = api.bulk_annotations(group="group_id")
+# Retrieve annotations by specific IDs (most efficient for known IDs)
+result = api.bulk_annotations(annotation_ids=["id1", "id2", "id3"])
+for ann in result.get("annotations", []):
+    print(f"{ann['id']}: {ann.get('text', '')[:50]}")
 
-# Retrieve many groups
-result = api.bulk_groups(group_ids=["id1", "id2"])
+# Retrieve all annotations in a group
+result = api.bulk_annotations(group="your_group_id")
+print(f"Retrieved {len(result.get('annotations', []))} annotations")
 
-# LMS-specific bulk retrieval
-result = api.bulk_lms_annotations(group_ids=["id1"])
+# Retrieve annotations by user
+result = api.bulk_annotations(user="acct:username@hypothes.is")
+
+# Retrieve annotations by URI
+result = api.bulk_annotations(uri="https://example.com/article")
+
+# Bulk retrieve multiple groups at once
+result = api.bulk_groups(group_ids=["group1", "group2", "group3"])
+for group in result.get("groups", []):
+    print(f"{group['name']}: {group['id']}")
+
+# Bulk retrieve groups with expanded info
+result = api.bulk_groups(
+    group_ids=["group1"],
+    expand=["organization", "scopes"]
+)
+
+# LMS-specific bulk retrieval (for educational integrations)
+result = api.bulk_lms_annotations(
+    group_ids=["class_group_1", "class_group_2"],
+    assignment_id="assignment_123",
+    course_id="course_456"
+)
 ```
+
+**When to use bulk vs search:**
+- Use `bulk_annotations()` when you know specific IDs or need all annotations in a group
+- Use `search()` when you need filtering by tags, text, date ranges, or complex queries
+- Bulk methods return all results at once; search returns a paginated generator
 
 #### Group Membership Management
 ```python
