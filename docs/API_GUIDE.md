@@ -718,6 +718,135 @@ for ann in api.search(user="your_username", limit=50):
 
 ---
 
+## API Comprehensiveness
+
+This section analyzes what the Hypothesis API covers compared to all available functionality, and what this Python wrapper implements.
+
+### Hypothesis API Coverage
+
+The Hypothesis API v1.0 provides programmatic access to most core annotation functionality, but not everything users can do through the website or browser extension.
+
+#### What the API Provides
+
+| Category | Available via API |
+|----------|------------------|
+| Annotations | Full CRUD, search, flagging, moderation |
+| Groups | Create, read, update, membership management |
+| Search | Comprehensive filtering and pagination |
+| Profile | Read profile, update preferences |
+| Users | Admin operations for third-party authorities |
+| Bulk Operations | Batch retrieval and operations |
+| Analytics | Event tracking |
+
+#### What's NOT Available via API
+
+These features require the web interface or browser extension:
+
+| Feature | Notes |
+|---------|-------|
+| Account registration | Must use hypothes.is website |
+| Password management | Reset/change via website only |
+| OAuth/SSO connections | Configured through account settings |
+| Account deletion | Contact support or use website |
+| Browser extension features | Real-time sync, sidebar UI |
+| "Via" proxy | hypothes.is/via/ for viewing annotations |
+| PDF viewer | Built into the browser extension |
+| Email notifications | Managed in account preferences |
+| Public activity stream | Available on user profile pages |
+
+### Python Wrapper Coverage
+
+This library (`hypothesisapi`) implements most of the Hypothesis API v1.0, but not all endpoints.
+
+#### Implemented Endpoints
+
+| Category | Endpoints | Status |
+|----------|-----------|--------|
+| **Annotations** | create, get, update, delete | Complete |
+| | flag, hide, unhide | Complete |
+| | search (paginated) | Complete |
+| **Groups** | create, get, list, update | Complete |
+| | get_members, leave | Complete |
+| **Profile** | get_profile, get_profile_groups | Complete |
+| **Users** | create, get, update (admin) | Complete |
+
+#### Not Yet Implemented
+
+These API endpoints exist but aren't wrapped by this library:
+
+| Endpoint | Description | Use Case |
+|----------|-------------|----------|
+| `POST /api/bulk` | Batch operations | Efficient bulk updates |
+| `POST /api/bulk/annotation` | Bulk annotation retrieval | Export large datasets |
+| `POST /api/bulk/group` | Bulk group retrieval | Multi-group queries |
+| `GET /api/groups/:id/annotations` | All annotations in group | Group-level export |
+| `POST /api/groups/:id/members/:userid` | Add member to group | Group administration |
+| `DELETE /api/groups/:id/members/:userid` | Remove member from group | Group administration |
+| `PATCH /api/groups/:id/members/:userid` | Change member role | Promote/demote members |
+| `PATCH /api/profile` | Update preferences | Change user settings |
+| `POST /api/annotations/:id/reindex` | Reindex annotation | Admin maintenance |
+| `PATCH /api/annotations/:id/moderation` | Moderation actions | Content moderation |
+| `POST /api/analytics/events` | Track events | Usage analytics |
+| `GET /api/links` | URL templates | Generate page URLs |
+
+#### Workarounds for Missing Features
+
+**Bulk annotation retrieval:** Use `search()` with pagination:
+```python
+# Instead of bulk endpoint, paginate through results
+all_annotations = list(api.search(group="group_id"))
+```
+
+**Add user to group:** Currently requires sharing the group join link manually or using the website.
+
+**Group annotations:** Use search with group filter:
+```python
+# Get all annotations in a group
+for ann in api.search(group="group_id"):
+    print(ann["text"])
+```
+
+### API vs Website Feature Matrix
+
+| Feature | API | Website | Extension | This Library |
+|---------|-----|---------|-----------|--------------|
+| Create annotation | Yes | Yes | Yes | Yes |
+| Anchored annotations | Yes* | Yes | Yes | Yes* |
+| Page notes | Yes | Yes | Yes | Yes |
+| Replies | Yes | Yes | Yes | Yes |
+| Search annotations | Yes | Yes | No | Yes |
+| Create groups | Yes | Yes | No | Yes |
+| Join groups | No | Yes | Yes | No |
+| Invite to groups | No | Yes | No | No |
+| Manage group roles | Yes | Yes | No | No |
+| Real-time updates | No | Yes | Yes | No |
+| PDF annotation | Yes* | No | Yes | Yes* |
+| Notifications | No | Yes | Yes | No |
+| Account settings | Partial | Yes | No | Partial |
+
+*Anchored annotations and PDF support require constructing proper selectors, which the API accepts but the library doesn't help generate.
+
+### Recommendations
+
+1. **For most use cases**, this library provides sufficient coverage for:
+   - Building annotation tools and integrations
+   - Exporting and analyzing annotations
+   - Automating annotation workflows
+   - Group management (basic)
+
+2. **Use the website/extension for:**
+   - Account management
+   - Joining groups via invite links
+   - Real-time collaborative annotation
+   - Managing notification preferences
+
+3. **Consider contributing** if you need:
+   - Bulk operations
+   - Advanced group membership management
+   - Analytics tracking
+
+---
+
 ## Additional Resources
 
 - **Hypothesis Website**: https://hypothes.is/
