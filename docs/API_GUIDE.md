@@ -685,10 +685,21 @@ for ann in api.search(user="your_username", limit=50):
 | `flag(id)` | Flag for review | User |
 | `hide(id)` | Hide annotation | Moderator |
 | `unhide(id)` | Unhide annotation | Moderator |
+| `reindex(id)` | Reindex annotation | Admin |
+| `moderation(id, hidden)` | Update moderation status | Moderator |
 | `search(...)` | Search with pagination | User |
 | `search_raw(...)` | Single-page search | User |
 
 *Public annotations are readable by anyone; private annotations require appropriate permissions.
+
+### Bulk Methods
+
+| Method | Description | Permission |
+|--------|-------------|------------|
+| `bulk(operations)` | Perform batch operations | User |
+| `bulk_annotations(...)` | Bulk retrieve annotations | User |
+| `bulk_groups(...)` | Bulk retrieve groups | User |
+| `bulk_lms_annotations(...)` | LMS annotation retrieval | User |
 
 ### Group Methods
 
@@ -698,7 +709,12 @@ for ann in api.search(user="your_username", limit=50):
 | `create_group(name, description)` | Create private group | User |
 | `get_group(id)` | Get group details | Member |
 | `update_group(id, name, description)` | Update group | Owner |
+| `get_group_annotations(id)` | Get all annotations in group | Member |
 | `get_group_members(id)` | List members | Member |
+| `add_group_member(id, userid)` | Add user to group | Admin/Owner |
+| `get_group_member(id, userid)` | Get member details | Member |
+| `update_group_member(id, userid, roles)` | Change member role | Admin/Owner |
+| `remove_group_member(id, userid)` | Remove user from group | Admin/Owner |
 | `leave_group(id)` | Leave group | Member |
 
 ### Profile Methods
@@ -707,6 +723,7 @@ for ann in api.search(user="your_username", limit=50):
 |--------|-------------|------------|
 | `get_profile()` | Get current user profile | User |
 | `get_profile_groups()` | Get user's groups | User |
+| `update_profile(preferences)` | Update user preferences | User |
 
 ### User Methods (Admin Only)
 
@@ -716,29 +733,95 @@ for ann in api.search(user="your_username", limit=50):
 | `get_user(userid)` | Get user info | Admin |
 | `update_user(userid, ...)` | Update user | Admin |
 
+### Analytics Methods
+
+| Method | Description | Permission |
+|--------|-------------|------------|
+| `create_analytics_event(type, properties)` | Track analytics event | User |
+
+### Utility Methods
+
+| Method | Description | Permission |
+|--------|-------------|------------|
+| `root()` | Get API information | Public |
+| `get_links()` | Get URL templates | Public |
+
 ---
 
 ## API Comprehensiveness
 
 This section analyzes what the Hypothesis API covers compared to all available functionality, and what this Python wrapper implements.
 
-### Hypothesis API Coverage
+### Python Wrapper: 100% API Coverage
 
-The Hypothesis API v1.0 provides programmatic access to most core annotation functionality, but not everything users can do through the website or browser extension.
+This library (`hypothesisapi`) now implements **all** Hypothesis API v1.0 endpoints. Every documented API endpoint has a corresponding Python method.
 
-#### What the API Provides
+#### Complete API Coverage Table
 
-| Category | Available via API |
-|----------|------------------|
-| Annotations | Full CRUD, search, flagging, moderation |
-| Groups | Create, read, update, membership management |
-| Search | Comprehensive filtering and pagination |
-| Profile | Read profile, update preferences |
-| Users | Admin operations for third-party authorities |
-| Bulk Operations | Batch retrieval and operations |
-| Analytics | Event tracking |
+| API Endpoint | Method | Description |
+|--------------|--------|-------------|
+| **Annotations** | | |
+| `POST /api/annotations` | `create()` | Create annotation |
+| `GET /api/annotations/:id` | `get_annotation()` | Get annotation |
+| `PATCH /api/annotations/:id` | `update()` | Update annotation |
+| `DELETE /api/annotations/:id` | `delete()` | Delete annotation |
+| `PUT /api/annotations/:id/flag` | `flag()` | Flag for review |
+| `PUT /api/annotations/:id/hide` | `hide()` | Hide annotation (moderator) |
+| `DELETE /api/annotations/:id/hide` | `unhide()` | Unhide annotation (moderator) |
+| `POST /api/annotations/:id/reindex` | `reindex()` | Reindex annotation (admin) |
+| `PATCH /api/annotations/:id/moderation` | `moderation()` | Update moderation status |
+| **Search** | | |
+| `GET /api/search` | `search()` | Paginated search (generator) |
+| `GET /api/search` | `search_raw()` | Single-page search |
+| **Bulk Operations** | | |
+| `POST /api/bulk` | `bulk()` | Batch operations |
+| `POST /api/bulk/annotation` | `bulk_annotations()` | Bulk annotation retrieval |
+| `POST /api/bulk/group` | `bulk_groups()` | Bulk group retrieval |
+| `POST /api/bulk/lms/annotations` | `bulk_lms_annotations()` | LMS annotation retrieval |
+| **Groups** | | |
+| `GET /api/groups` | `get_groups()` | List groups |
+| `POST /api/groups` | `create_group()` | Create group |
+| `GET /api/groups/:id` | `get_group()` | Get group details |
+| `PATCH /api/groups/:id` | `update_group()` | Update group |
+| `GET /api/groups/:id/annotations` | `get_group_annotations()` | Get group annotations |
+| `GET /api/groups/:id/members` | `get_group_members()` | List group members |
+| `POST /api/groups/:id/members/:userid` | `add_group_member()` | Add member to group |
+| `GET /api/groups/:id/members/:userid` | `get_group_member()` | Get member details |
+| `PATCH /api/groups/:id/members/:userid` | `update_group_member()` | Update member role |
+| `DELETE /api/groups/:id/members/:userid` | `remove_group_member()` | Remove member |
+| `DELETE /api/groups/:id/members/me` | `leave_group()` | Leave group |
+| **Profile** | | |
+| `GET /api/profile` | `get_profile()` | Get user profile |
+| `PATCH /api/profile` | `update_profile()` | Update preferences |
+| `GET /api/profile/groups` | `get_profile_groups()` | Get user's groups |
+| **Users (Admin)** | | |
+| `POST /api/users` | `create_user()` | Create user |
+| `GET /api/users/:userid` | `get_user()` | Get user |
+| `PATCH /api/users/:username` | `update_user()` | Update user |
+| **Analytics** | | |
+| `POST /api/analytics/events` | `create_analytics_event()` | Track events |
+| **Links** | | |
+| `GET /api/links` | `get_links()` | Get URL templates |
+| **Root** | | |
+| `GET /api` | `root()` | API information |
 
-#### What's NOT Available via API
+### What the API Provides vs What It Doesn't
+
+The Hypothesis API provides programmatic access to annotation functionality, but some features are only available through the website or browser extension.
+
+#### Available via API (and this library)
+
+| Category | Capabilities |
+|----------|-------------|
+| **Annotations** | Full CRUD, search, flagging, moderation, bulk retrieval |
+| **Groups** | Create, read, update, full membership management |
+| **Search** | Comprehensive filtering, pagination, wildcards |
+| **Profile** | Read profile, update preferences |
+| **Users** | Admin operations for third-party authorities |
+| **Bulk Operations** | Batch retrieval for annotations and groups |
+| **Analytics** | Event tracking |
+
+#### NOT Available via API
 
 These features require the web interface or browser extension:
 
@@ -751,60 +834,8 @@ These features require the web interface or browser extension:
 | Browser extension features | Real-time sync, sidebar UI |
 | "Via" proxy | hypothes.is/via/ for viewing annotations |
 | PDF viewer | Built into the browser extension |
-| Email notifications | Managed in account preferences |
-| Public activity stream | Available on user profile pages |
-
-### Python Wrapper Coverage
-
-This library (`hypothesisapi`) implements most of the Hypothesis API v1.0, but not all endpoints.
-
-#### Implemented Endpoints
-
-| Category | Endpoints | Status |
-|----------|-----------|--------|
-| **Annotations** | create, get, update, delete | Complete |
-| | flag, hide, unhide | Complete |
-| | search (paginated) | Complete |
-| **Groups** | create, get, list, update | Complete |
-| | get_members, leave | Complete |
-| **Profile** | get_profile, get_profile_groups | Complete |
-| **Users** | create, get, update (admin) | Complete |
-
-#### Not Yet Implemented
-
-These API endpoints exist but aren't wrapped by this library:
-
-| Endpoint | Description | Use Case |
-|----------|-------------|----------|
-| `POST /api/bulk` | Batch operations | Efficient bulk updates |
-| `POST /api/bulk/annotation` | Bulk annotation retrieval | Export large datasets |
-| `POST /api/bulk/group` | Bulk group retrieval | Multi-group queries |
-| `GET /api/groups/:id/annotations` | All annotations in group | Group-level export |
-| `POST /api/groups/:id/members/:userid` | Add member to group | Group administration |
-| `DELETE /api/groups/:id/members/:userid` | Remove member from group | Group administration |
-| `PATCH /api/groups/:id/members/:userid` | Change member role | Promote/demote members |
-| `PATCH /api/profile` | Update preferences | Change user settings |
-| `POST /api/annotations/:id/reindex` | Reindex annotation | Admin maintenance |
-| `PATCH /api/annotations/:id/moderation` | Moderation actions | Content moderation |
-| `POST /api/analytics/events` | Track events | Usage analytics |
-| `GET /api/links` | URL templates | Generate page URLs |
-
-#### Workarounds for Missing Features
-
-**Bulk annotation retrieval:** Use `search()` with pagination:
-```python
-# Instead of bulk endpoint, paginate through results
-all_annotations = list(api.search(group="group_id"))
-```
-
-**Add user to group:** Currently requires sharing the group join link manually or using the website.
-
-**Group annotations:** Use search with group filter:
-```python
-# Get all annotations in a group
-for ann in api.search(group="group_id"):
-    print(ann["text"])
-```
+| Real-time updates | WebSocket-based, not REST |
+| Joining groups via invite | Requires clicking invite link |
 
 ### API vs Website Feature Matrix
 
@@ -815,35 +846,90 @@ for ann in api.search(group="group_id"):
 | Page notes | Yes | Yes | Yes | Yes |
 | Replies | Yes | Yes | Yes | Yes |
 | Search annotations | Yes | Yes | No | Yes |
+| Bulk operations | Yes | No | No | Yes |
 | Create groups | Yes | Yes | No | Yes |
-| Join groups | No | Yes | Yes | No |
-| Invite to groups | No | Yes | No | No |
-| Manage group roles | Yes | Yes | No | No |
+| Add/remove members | Yes | Yes | No | Yes |
+| Manage group roles | Yes | Yes | No | Yes |
+| Join groups (invite) | No | Yes | Yes | No |
 | Real-time updates | No | Yes | Yes | No |
 | PDF annotation | Yes* | No | Yes | Yes* |
-| Notifications | No | Yes | Yes | No |
+| Track analytics | Yes | Auto | Auto | Yes |
 | Account settings | Partial | Yes | No | Partial |
 
 *Anchored annotations and PDF support require constructing proper selectors, which the API accepts but the library doesn't help generate.
 
+### New Methods (Recently Added)
+
+These methods complete the API coverage:
+
+#### Annotation Moderation
+```python
+# Reindex an annotation (admin)
+api.reindex("annotation_id")
+
+# Update moderation status
+api.moderation("annotation_id", hidden=True)
+```
+
+#### Bulk Operations
+```python
+# Retrieve many annotations efficiently
+result = api.bulk_annotations(group="group_id")
+
+# Retrieve many groups
+result = api.bulk_groups(group_ids=["id1", "id2"])
+
+# LMS-specific bulk retrieval
+result = api.bulk_lms_annotations(group_ids=["id1"])
+```
+
+#### Group Membership Management
+```python
+# Add a user to a group
+api.add_group_member("group_id", "acct:user@hypothes.is")
+
+# Get member details
+member = api.get_group_member("group_id", "acct:user@hypothes.is")
+
+# Update member role (promote to moderator)
+api.update_group_member("group_id", "acct:user@hypothes.is", roles=["moderator"])
+
+# Remove a member
+api.remove_group_member("group_id", "acct:user@hypothes.is")
+
+# Get all annotations in a group directly
+result = api.get_group_annotations("group_id")
+```
+
+#### Profile Management
+```python
+# Update profile preferences
+api.update_profile({"notifications": {"reply": True}})
+```
+
+#### Analytics & Links
+```python
+# Track an analytics event
+api.create_analytics_event("page_view", {"url": "https://example.com"})
+
+# Get URL templates
+links = api.get_links()
+```
+
 ### Recommendations
 
-1. **For most use cases**, this library provides sufficient coverage for:
+1. **This library provides complete API coverage** for:
    - Building annotation tools and integrations
-   - Exporting and analyzing annotations
+   - Exporting and analyzing annotations (including bulk operations)
    - Automating annotation workflows
-   - Group management (basic)
+   - Full group management including membership
+   - Analytics tracking
 
 2. **Use the website/extension for:**
-   - Account management
+   - Account registration and management
    - Joining groups via invite links
    - Real-time collaborative annotation
-   - Managing notification preferences
-
-3. **Consider contributing** if you need:
-   - Bulk operations
-   - Advanced group membership management
-   - Analytics tracking
+   - The visual annotation experience
 
 ---
 
